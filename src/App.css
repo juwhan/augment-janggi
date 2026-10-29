@@ -1,0 +1,7 @@
+.app { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 24px; font-family: system-ui, sans-serif; }
+.turn { margin: 0; color: #555; }
+.board { display: grid; grid-template-columns: repeat(9, 52px); grid-template-rows: repeat(10, 52px); background: #e9c88a; border: 2px solid #5a3e1b; }
+.cell { display: flex; align-items: center; justify-content: center; border: 1px solid #a07c45; }
+.piece { width: 44px; height: 44px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: 700; background: #fffaf0; border: 2px solid currentColor; }
+.piece.cho { color: #1f6f43; }
+.piece.han { color: #b3261e; }
