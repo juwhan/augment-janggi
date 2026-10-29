@@ -1,9 +1,13 @@
 import { useState } from 'react';
 import { createInitialState, PIECE_LABEL } from './game/board';
+import { getLegalMoves } from './game/moves';
 import './App.css';
 
 // 1주차 목표: 초기 판이 제대로 만들어졌는지 눈으로 확인하기.
 // 클릭/이동은 2~3주차에 붙인다.
+// [확인용] 시작 상태에서 둘 수 있는 수를 브라우저 콘솔(F12)에 출력한다. 확인 후 지워도 된다.
+console.log('가능한 수:', getLegalMoves(createInitialState()));
+
 function App() {
     const [state] = useState(createInitialState);
 
