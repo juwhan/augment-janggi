@@ -4,6 +4,7 @@
 // applyMove는 그중 하나를 골랐을 때 판을 실제로 바꾼다.
 // ───────────────────────────────────────────────
 import { opponent } from './board';
+import { getLegalMoves } from './moves';
 import type { GameState, Move } from './types';
 
 /**
@@ -43,11 +44,20 @@ export function applyMove(state: GameState, move: Move): GameState {
     //    잡힌 말이 궁이면, 지금 둔 쪽(state.turn)이 이긴다.
     const winner = captured !== null && captured.type === 'general' ? state.turn : null;
 
-    // 5. 새 상태 만들어서 돌려주기
-    return {
+    // 5. 새 상태 만들기
+    const next: GameState = {
         board,
         turn: opponent(state.turn),      // 차례 넘기기 (초 → 한, 한 → 초)
         moveCount: state.moveCount + 1,  // 둔 수 +1 (나중에 증강 드래프트 타이밍에 쓴다)
         winner,
     };
+
+    // 6. [추가] 상대가 둘 수 있는 수가 하나도 없으면, 지금 둔 쪽이 이긴다.
+    //    (증강 체스처럼 "움직일 수 없으면 패배" 규칙. 스테일메이트가 없다)
+    //    이 검사가 없으면 봇이 둘 수가 없는데 차례가 넘어와서 게임이 멈춰버린다.
+    if (next.winner === null && getLegalMoves(next).length === 0) {
+        next.winner = state.turn;
+    }
+
+    return next;
 }

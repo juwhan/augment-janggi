@@ -1,7 +1,119 @@
-.app { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 24px; font-family: system-ui, sans-serif; }
-.turn { margin: 0; color: #555; }
-.board { display: grid; grid-template-columns: repeat(9, 52px); grid-template-rows: repeat(10, 52px); background: #e9c88a; border: 2px solid #5a3e1b; }
-.cell { display: flex; align-items: center; justify-content: center; border: 1px solid #a07c45; }
-.piece { width: 44px; height: 44px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: 700; background: #fffaf0; border: 2px solid currentColor; }
+.app {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    padding: 24px 16px;
+    font-family: system-ui, sans-serif;
+}
+
+.app h1 {
+    margin: 0;
+}
+
+button {
+    font: inherit;
+    padding: 8px 16px;
+    border: 1px solid #5a3e1b;
+    border-radius: 8px;
+    background: #fffaf0;
+    color: #3a2a12;
+    cursor: pointer;
+}
+button:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+/* ── 시작 화면 ── */
+.start {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    width: 100%;
+    max-width: 420px;
+}
+.option-group h2 {
+    margin: 0 0 8px;
+    font-size: 16px;
+}
+.options {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+}
+.options button.active,
+.levels button.active {
+    background: #5a3e1b;
+    color: #fffaf0;
+}
+.options button.cho.active { background: #1f6f43; border-color: #1f6f43; }
+.options button.han.active { background: #b3261e; border-color: #b3261e; }
+.levels {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.levels button {
+    display: flex;
+    justify-content: space-between;
+    text-align: left;
+}
+.levels button span {
+    font-size: 14px;
+    opacity: 0.8;
+}
+.start-button {
+    padding: 12px;
+    font-size: 18px;
+    font-weight: 700;
+    background: #5a3e1b;
+    color: #fffaf0;
+}
+
+/* ── 게임 화면 ── */
+.game {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+}
+.info {
+    margin: 0;
+    color: #6b5a40;
+    font-size: 14px;
+}
+.status {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+}
+.status.cho { color: #1f6f43; }
+.status.han { color: #b3261e; }
+.status.winner { font-size: 24px; }
+.buttons {
+    display: flex;
+    gap: 8px;
+}
+
+/* ── 판 ── */
+.board {
+    width: 100%;
+    max-width: 520px;
+    height: auto;
+    user-select: none;
+}
+.board-bg { fill: #e9c88a; stroke: #5a3e1b; stroke-width: 3; }
+.board-lines line { stroke: #6b4a22; stroke-width: 1.5; }
+
+.piece circle { fill: #fffaf0; stroke: currentColor; stroke-width: 2.5; }
+.piece text { fill: currentColor; font-weight: 700; font-family: serif; }
 .piece.cho { color: #1f6f43; }
 .piece.han { color: #b3261e; }
+.piece.selected circle { fill: #fff2b3; stroke-width: 4; }
+
+.target-dot { fill: rgba(30, 90, 200, 0.55); }
+.target-ring { fill: none; stroke: rgba(200, 40, 40, 0.75); stroke-width: 4; }
+
+.hit { fill: transparent; cursor: pointer; }
