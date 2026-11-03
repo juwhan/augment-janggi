@@ -90,6 +90,7 @@ function quiescence(
     if (state.winner !== null) {
         return state.winner === ctx.botTeam ? WIN_SCORE : -WIN_SCORE;
     }
+    if (state.isDraw) return 0; // 무승부는 0점
 
     // 스탠드팻: 여기서 멈췄을 때의 점수
     const standPat = ctx.evaluate(state, ctx.botTeam);
@@ -149,6 +150,7 @@ function alphaBeta(
     state: GameState, depth: number, alpha: number, beta: number, ctx: SearchContext,
 ): number {
     checkTime(ctx);
+    if (state.isDraw) return 0; // 무승부는 0점
     if (state.winner !== null) {
         // depth를 더하는 이유는 minimax.ts와 같다: 빨리 이기고, 늦게 진다.
         return state.winner === ctx.botTeam ? WIN_SCORE + depth : -WIN_SCORE - depth;

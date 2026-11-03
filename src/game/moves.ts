@@ -1,6 +1,7 @@
-import type { GameState, Move, Position, Board, Piece } from './types';
+import type { GameState, Move, Position, Board, Piece, AugmentId } from './types';
 import { inBounds, getPiece, isInPalace } from './board';
 import { ROWS, COLS } from './types';
+import { AUG } from './augmentIds';
 
 // 말 하나가 갈 수 있는 수
 function getPieceMoves(board: Board, from: Position): Move[] {
@@ -21,6 +22,7 @@ function getPieceMoves(board: Board, from: Position): Move[] {
 // 지금 차례인 진영의 모든 수
 export function getLegalMoves(state: GameState): Move[] {
     const moves: Move[] = []; // 판 전체에서 찾은 수를 모아둘 배열
+    const augs = state.augments[state.turn]; // 지금 차례인 진영이 가진 증강
 
     // 판의 모든 칸(10행 x 9열)을 하나씩 확인한다. C의 2중 for문과 같다.
     for (let row = 0; row < ROWS; row++) {
@@ -31,20 +33,26 @@ export function getLegalMoves(state: GameState): Move[] {
             // 2. 말이 있고(null이 아니고), 지금 차례인 진영의 말일 때만 수를 찾는다.
             if (target !== null && target.team === state.turn) {
                 // getPieceMoves가 말 종류(차, 마, 포...)를 보고 알맞은 함수를 대신 골라준다.
-                // 그래서 여기서는 switch 없이 부르기만 하면 되고,
-                // 나중에 말이 추가돼도 이 함수는 고칠 필요가 없다.
+                // moves.push(...배열)은 배열을 풀어서 하나씩 넣는다.
                 const pieceMoves = getPieceMoves(state.board, { row, col });
-
-                // pieceMoves는 "수의 배열"이다. 예: [수1, 수2]
-                // moves.push(pieceMoves)라고 쓰면 배열이 통째로 한 칸에 들어가서
-                //   moves = [[수1, 수2]]   ← 배열 안에 배열 (틀림)
-                // 앞에 ...을 붙이면 배열이 풀려서 하나씩 들어간다.
-                //   moves = [수1, 수2]     ← 원하는 모양
                 moves.push(...pieceMoves);
 
-                // return을 쓰지 않는 이유:
-                // return은 함수를 그 자리에서 끝내버려서, 첫 번째 말만 보고 멈춘다.
-                // 판 전체를 끝까지 돌아야 하니까 push로 "모아두기"만 한다.
+                // 3. [증강] 증강이 있으면, 증강으로 새로 생긴 이동을 추가한다.
+                //    기본 이동과 같은 칸으로 가는 수는 중복이니 빼고 넣는다.
+                if (augs.length > 0) {
+                    const extra = getAugmentExtraMoves(state.board, { row, col }, target, augs);
+                    if (extra.length > 0) {
+                        // 이미 있는 도착 칸을 "행,열" 글자로 모아두고, 없는 것만 추가
+                        const seen = new Set(pieceMoves.map((m) => `${m.to.row},${m.to.col}`));
+                        for (const m of extra) {
+                            const key = `${m.to.row},${m.to.col}`;
+                            if (!seen.has(key)) {
+                                seen.add(key);
+                                moves.push(m);
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -272,7 +280,7 @@ function getCannonMoves(board: Board, from: Position): Move[] {
  * - path: 지나가는 칸들(멱). 출발점 기준으로 [행 변화, 열 변화]. 하나라도 막히면 못 간다.
  * - to:   도착 칸. 출발점 기준으로 [행 변화, 열 변화].
  */
-interface JumpPattern {
+export interface JumpPattern {
     path: [number, number][];
     to: [number, number];
 }
@@ -310,7 +318,7 @@ const HORSE_PATTERNS: JumpPattern[] = [
  * 점프형 말의 공통 로직.
  * 패턴 표만 바꿔 넣으면 마와 상 모두 이 함수 하나로 처리할 수 있다.
  */
-function getJumpMoves(board: Board, from: Position, patterns: JumpPattern[]): Move[] {
+export function getJumpMoves(board: Board, from: Position, patterns: JumpPattern[]): Move[] {
     const moves: Move[] = [];
     const me = getPiece(board, from)!; // 지금 움직이려는 말
 
@@ -456,6 +464,145 @@ function getSoldierMoves(board: Board, from: Position): Move[] {
         if (canLandOn(board, me, to)) {
             moves.push({ from, to });
         }
+    }
+    return moves;
+}
+
+// ───────────────────────────────────────────────
+// [증강] 증강으로 추가되는 이동
+//
+// 기본 이동 함수(위쪽)는 그대로 두고, 증강이 있을 때 "추가로 갈 수 있는 칸"만 여기서 만든다.
+// 그래서 증강을 아무리 늘려도 원래 규칙 코드는 건드리지 않는다.
+// ───────────────────────────────────────────────
+
+/** 상하좌우 방향 */
+const ORTHOGONAL: [number, number][] = [[-1, 0], [1, 0], [0, -1], [0, 1]];
+
+/**
+ * 말 하나에 대해, 그 진영의 증강 때문에 추가로 생기는 이동들.
+ * 기본 이동과 겹치는 수가 섞여 있어도 괜찮다. (getLegalMoves에서 걸러낸다)
+ */
+function getAugmentExtraMoves(board: Board, from: Position, piece: Piece, augs: AugmentId[]): Move[] {
+    const has = (id: AugmentId) => augs.includes(id);
+    const moves: Move[] = [];
+
+    // 상하좌우 한 칸 중, 조건에 맞는 칸으로 가는 수를 추가하는 도우미
+    const stepTo = (dr: number, dc: number, allow: (to: Position) => boolean) => {
+        const to = { row: from.row + dr, col: from.col + dc };
+        if (canLandOn(board, piece, to) && allow(to)) moves.push({ from, to });
+    };
+
+    switch (piece.type) {
+        case 'chariot':
+            // 차의 도약: 내 말 하나를 뛰어넘어 계속 미끄러진다
+            if (has(AUG.CHARIOT_LEAP)) {
+                for (const ray of getOrthogonalRays(from)) {
+                    moves.push(...chariotLeapAlong(board, from, piece, ray));
+                }
+            }
+            break;
+
+        case 'cannon':
+            // 포의 다리: 포도 받침으로 쓸 수 있다 (포를 잡는 건 여전히 불가)
+            if (has(AUG.CANNON_BRIDGE)) {
+                const rays = [...getOrthogonalRays(from), ...getPalaceDiagonalRays(from)];
+                for (const ray of rays) moves.push(...cannonBridgeAlong(board, from, piece, ray));
+            }
+            // 포의 각성: 받침 없이 상하좌우 한 칸 이동 (빈 칸으로만, 잡기는 불가)
+            if (has(AUG.CANNON_STEP)) {
+                for (const [dr, dc] of ORTHOGONAL) {
+                    stepTo(dr, dc, (to) => getPiece(board, to) === null);
+                }
+            }
+            break;
+
+        case 'horse':
+            // 철갑마: 멱이 막혀도 이동 (패턴에서 멱을 지운다)
+            if (has(AUG.ARMORED_HORSE)) {
+                moves.push(...getJumpMoves(board, from, HORSE_PATTERNS.map((p) => ({ path: [], to: p.to }))));
+            }
+            // 질주마: 직선 두 칸 (중간 칸이 막히면 불가)
+            if (has(AUG.SWIFT_HORSE)) {
+                moves.push(...getJumpMoves(board, from, ORTHOGONAL.map(([dr, dc]) => ({
+                    path: [[dr, dc]] as [number, number][],
+                    to: [dr * 2, dc * 2] as [number, number],
+                }))));
+            }
+            break;
+
+        case 'elephant':
+            // 넓은 상: 대각선 한 칸
+            if (has(AUG.WIDE_ELEPHANT)) {
+                moves.push(...getJumpMoves(board, from, [
+                    { path: [], to: [-1, -1] }, { path: [], to: [-1, 1] },
+                    { path: [], to: [1, -1] }, { path: [], to: [1, 1] },
+                ]));
+            }
+            break;
+
+        case 'general':
+            // 궁의 출정: 궁성 밖으로도 상하좌우 한 칸 (궁성 안 이동은 기본 규칙이 처리)
+            if (has(AUG.GENERAL_SORTIE)) {
+                for (const [dr, dc] of ORTHOGONAL) stepTo(dr, dc, (to) => !isInPalace(to));
+            }
+            break;
+
+        case 'guard':
+            // 사의 각성: 궁성 안에서 마처럼 이동 (멱 규칙도 마와 같다)
+            if (has(AUG.GUARD_HORSE)) {
+                moves.push(...getJumpMoves(board, from, HORSE_PATTERNS).filter((m) => isInPalace(m.to)));
+            }
+            break;
+
+        case 'soldier':
+            // 결사대: 뒤로 한 칸
+            if (has(AUG.SOLDIER_RETREAT)) {
+                const backward = piece.team === 'cho' ? 1 : -1;
+                stepTo(backward, 0, () => true);
+            }
+            break;
+    }
+    return moves;
+}
+
+/** 차의 도약: 처음 만난 "내 말" 하나를 건너뛰고, 그 뒤로 차처럼 미끄러진다 */
+function chariotLeapAlong(board: Board, from: Position, me: Piece, ray: Position[]): Move[] {
+    const moves: Move[] = [];
+    let leaped = false;
+    for (const to of ray) {
+        const target = getPiece(board, to);
+        if (!leaped) {
+            if (target === null) continue;          // 뛰기 전 빈 칸은 기본 규칙이 이미 처리
+            if (target.team !== me.team) break;     // 상대 말은 뛰어넘지 못한다
+            leaped = true;                          // 내 말 발견 → 뛰어넘는다
+            continue;
+        }
+        if (target === null) {
+            moves.push({ from, to });
+        } else {
+            if (target.team !== me.team) moves.push({ from, to });
+            break;
+        }
+    }
+    return moves;
+}
+
+/** 포의 다리: 포도 받침이 될 수 있는 포 이동 (포를 잡지는 못한다) */
+function cannonBridgeAlong(board: Board, from: Position, me: Piece, ray: Position[]): Move[] {
+    const moves: Move[] = [];
+    let jumped = false;
+    for (const to of ray) {
+        const target = getPiece(board, to);
+        if (!jumped) {
+            if (target !== null) jumped = true;     // 어떤 말이든 받침이 된다 (포 포함)
+            continue;
+        }
+        if (target === null) {
+            moves.push({ from, to });
+            continue;
+        }
+        if (target.type !== 'cannon' && target.team !== me.team) moves.push({ from, to });
+        break;
     }
     return moves;
 }

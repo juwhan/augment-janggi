@@ -1,15 +1,28 @@
 // ───────────────────────────────────────────────
 // 게임 화면: 판 상태를 들고 있고, 클릭과 봇의 수를 처리한다.
 // ───────────────────────────────────────────────
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { createInitialState, getPiece } from '../game/board';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createInitialState, getPiece, opponent } from '../game/board';
 import { getLegalMoves } from '../game/moves';
 import { applyMove } from '../game/apply';
-import type { Position } from '../game/types';
+import type { AugmentId, Position, Team } from '../game/types';
 import { BOT_LEVELS } from '../bot';
 import type { BotRequest, BotResponse } from '../bot/bot.worker';
+import type { AugmentPhase } from '../augments/registry';
+import { PHASE_NAME, PHASE_ORDER } from '../augments/registry';
+import { DRAFT_THRESHOLDS, botPickAugment, drawOffers, finishDraft, pendingDraftPhase } from '../augments/draft';
 import { BoardView } from './BoardView';
+import { AugmentPanel } from './AugmentPanel';
+import { DraftModal } from './DraftModal';
 import type { GameSettings } from './StartScreen';
+
+/** 진행 중인 드래프트 */
+interface DraftState {
+    phase: AugmentPhase;
+    offers: Record<Team, AugmentId[]>;       // 각자에게 나온 카드
+    picks: Record<Team, AugmentId | null>;   // 각자 고른 카드
+    done: Record<Team, boolean>;             // 각자 골랐는지 (카드가 없으면 처음부터 true)
+}
 
 // 두 좌표가 같은 칸인지
 const samePos = (a: Position, b: Position) => a.row === b.row && a.col === b.col;
@@ -29,13 +42,20 @@ export function Game({ settings, onExit }: GameProps) {
     // ── 상태 ──
     const [state, setState] = useState(createInitialState);
     const [selected, setSelected] = useState<Position | null>(null);
+    const [draft, setDraft] = useState<DraftState | null>(null);
 
     // ── 계산 ──
     const levelInfo = BOT_LEVELS.find((l) => l.level === settings.level)!;
     const isBotGame = settings.mode === 'bot';
+    const botTeam: Team = opponent(settings.playerTeam);
 
-    // 지금이 봇 차례인지: 봇 대전이고, 내 진영 차례가 아니고, 게임이 안 끝났을 때
-    const isBotTurn = isBotGame && state.turn !== settings.playerTeam && state.winner === null;
+    // 지금 열려야 하는 드래프트 (없으면 null)
+    const draftDue = useMemo(() => pendingDraftPhase(state), [state]);
+    const isDrafting = draftDue !== null || draft !== null;
+    const isOver = state.winner !== null || state.isDraw;
+
+    // 지금이 봇 차례인지: 봇 대전이고, 내 진영 차례가 아니고, 게임이 안 끝났고, 드래프트 중이 아닐 때
+    const isBotTurn = isBotGame && state.turn !== settings.playerTeam && !isOver && !isDrafting;
 
     const legalMoves = useMemo(() => getLegalMoves(state), [state]);
     const selectedMoves = selected ? legalMoves.filter((m) => samePos(m.from, selected)) : [];
@@ -51,6 +71,44 @@ export function Game({ settings, onExit }: GameProps) {
         workerRef.current = worker;
         return () => worker.terminate();
     }, []);
+
+    // ── 드래프트 열기 ──
+    // 드래프트 시점이 되면 카드를 뽑는다. 봇 대전이면 봇은 바로 고른다.
+    useEffect(() => {
+        if (draftDue === null || draft !== null) return;
+        const offers = drawOffers(state, draftDue);
+        const picks: Record<Team, AugmentId | null> = { cho: null, han: null };
+        const done = { cho: offers.cho.length === 0, han: offers.han.length === 0 };
+        if (isBotGame) {
+            picks[botTeam] = botPickAugment(offers[botTeam], settings.level);
+            done[botTeam] = true;
+        }
+        setDraft({ phase: draftDue, offers, picks, done });
+    }, [draftDue, draft, state, isBotGame, botTeam, settings.level]);
+
+    // ── 드래프트 끝내기 ──
+    // 두 사람 다 고르면 증강을 적용하고 공개한다 (좌우 패널에 카드가 나타난다).
+    useEffect(() => {
+        if (!draft || !draft.done.cho || !draft.done.han) return;
+        setState((s) => finishDraft(s, draft.picks));
+        setDraft(null);
+    }, [draft]);
+
+    // 사람이 카드를 골랐을 때
+    const handlePick = useCallback((team: Team, id: AugmentId | null) => {
+        setDraft((d) => d && {
+            ...d,
+            picks: { ...d.picks, [team]: id },
+            done: { ...d.done, [team]: true },
+        });
+    }, []);
+
+    // 지금 화면에서 카드를 고를 진영 (봇 대전: 나, 친구와 플레이: 초가 먼저, 그다음 한)
+    let picker: Team | null = null;
+    if (draft) {
+        if (isBotGame) picker = draft.done[settings.playerTeam] ? null : settings.playerTeam;
+        else picker = !draft.done.cho ? 'cho' : !draft.done.han ? 'han' : null;
+    }
 
     // ── 봇 차례 처리 ──
     // useEffect: "state가 바뀐 뒤에" 실행되는 코드.
@@ -88,8 +146,9 @@ export function Game({ settings, onExit }: GameProps) {
 
     // ── 클릭 처리 ──
     function handleClick(pos: Position) {
-        if (state.winner !== null) return; // 게임 끝
-        if (isBotTurn) return;             // 봇이 생각 중일 땐 클릭 무시
+        if (isOver) return;      // 게임 끝
+        if (isDrafting) return;  // 증강 고르는 중
+        if (isBotTurn) return;   // 봇이 생각 중일 땐 클릭 무시
 
         // 1. 선택한 말이 갈 수 있는 칸을 눌렀다 → 수를 둔다
         if (selected) {
@@ -121,21 +180,36 @@ export function Game({ settings, onExit }: GameProps) {
     function restart() {
         setState(createInitialState());
         setSelected(null);
+        setDraft(null);
     }
 
     // ── 상태 문구 ──
     let status: string;
-    if (state.winner) {
+    if (state.isDraw) {
+        status = '무승부';
+    } else if (state.winner) {
         if (isBotGame) {
             status = state.winner === settings.playerTeam ? '승리했어요!' : '패배했어요';
         } else {
             status = `${TEAM_NAME[state.winner]} 승리!`;
         }
+    } else if (isDrafting) {
+        status = '증강 고르는 중...';
     } else if (isBotTurn) {
         status = `봇(${TEAM_NAME[state.turn]})이 생각 중...`;
     } else {
         status = `${TEAM_NAME[state.turn]} 차례 · ${state.moveCount + 1}수째`;
     }
+
+    // 다음 드래프트까지 남은 주요 기물 수 안내
+    const nextPhase = PHASE_ORDER[state.draftsDone];
+    const draftInfo = nextPhase && nextPhase !== 'opening'
+        ? `잡힌 주요 기물 ${state.majorCaptured}개 · ${PHASE_NAME[nextPhase]} 증강은 ${DRAFT_THRESHOLDS[nextPhase]}개부터`
+        : state.draftsDone >= PHASE_ORDER.length ? `잡힌 주요 기물 ${state.majorCaptured}개 · 증강 선택 완료` : '';
+
+    // 왼쪽 패널 = 나 (친구와 플레이면 초), 오른쪽 = 상대
+    const leftTeam: Team = isBotGame ? settings.playerTeam : 'cho';
+    const rightTeam: Team = opponent(leftTeam);
 
     return (
         <section className="game">
@@ -144,21 +218,47 @@ export function Game({ settings, onExit }: GameProps) {
                     ? `봇 대전 · ${levelInfo.level}단계 ${levelInfo.name} · 나: ${TEAM_NAME[settings.playerTeam]}`
                     : '친구와 플레이'}
             </p>
-            <p className={`status ${state.winner ?? state.turn} ${state.winner ? 'winner' : ''}`}>{status}</p>
+            <p className={`status ${state.winner ?? state.turn} ${isOver ? 'winner' : ''}`}>{status}</p>
+            {draftInfo && <p className="info">{draftInfo}</p>}
 
-            <BoardView
-                board={state.board}
-                selected={selected}
-                targets={selectedMoves.map((m) => m.to)}
-                onClick={handleClick}
-                // 봇 대전에서 한으로 플레이하면 내 진영이 아래에 오도록 판을 뒤집는다
-                flipped={isBotGame && settings.playerTeam === 'han'}
-            />
+            <div className="game-main">
+                <AugmentPanel
+                    title={isBotGame ? '나' : '초'}
+                    team={leftTeam}
+                    augments={state.augments[leftTeam]}
+                    side="left"
+                />
+                <BoardView
+                    board={state.board}
+                    selected={selected}
+                    targets={selectedMoves.map((m) => m.to)}
+                    onClick={handleClick}
+                    // 봇 대전에서 한으로 플레이하면 내 진영이 아래에 오도록 판을 뒤집는다
+                    flipped={isBotGame && settings.playerTeam === 'han'}
+                />
+                <AugmentPanel
+                    title={isBotGame ? '봇' : '한'}
+                    team={rightTeam}
+                    augments={state.augments[rightTeam]}
+                    side="right"
+                />
+            </div>
 
             <div className="buttons">
                 <button onClick={restart}>다시 하기</button>
                 <button onClick={onExit}>처음 화면</button>
             </div>
+
+            {draft && picker && (
+                <DraftModal
+                    // 고르는 사람이 바뀌면 새 화면으로 (타이머도 45초부터 다시)
+                    key={`${draft.phase}-${picker}`}
+                    phase={draft.phase}
+                    team={picker}
+                    offers={draft.offers[picker]}
+                    onPick={(id) => handlePick(picker!, id)}
+                />
+            )}
         </section>
     );
 }

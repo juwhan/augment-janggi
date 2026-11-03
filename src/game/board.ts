@@ -44,7 +44,44 @@ export function createInitialState(): GameState {
     setup('han', 0, 1, 2, 3);
     setup('cho', 9, 8, 7, 6);
 
-    return { board, turn: 'cho', moveCount: 0, winner: null };
+    const state: GameState = {
+        board,
+        turn: 'cho',
+        moveCount: 0,
+        winner: null,
+        isDraw: false,
+        augments: { cho: [], han: [] },
+        draftsDone: 0,
+        majorCaptured: 0,
+        quietMoves: 0,
+        positionCounts: {},
+    };
+    // 시작 판도 "한 번 나온 판"으로 기록해둔다 (반복 무승부 판정용)
+    state.positionCounts[positionKey(state)] = 1;
+    return state;
+}
+
+/**
+ * 판 모양을 문자열 하나로 만든다. 같은 판이면 같은 문자열이 나온다.
+ * 반복 무승부 판정에 쓴다. 차례도 포함한다. (같은 배치라도 누구 차례냐에 따라 다른 판이다)
+ */
+export function positionKey(state: GameState): string {
+    let key = state.turn;
+    for (const row of state.board) {
+        for (const p of row) {
+            key += p ? (p.team === 'cho' ? 'c' : 'h') + p.type[0] + p.type[1] : '.';
+        }
+    }
+    return key;
+}
+
+/**
+ * 플레이어 기준 행 번호(1~10) → 코드의 행 번호(0~9).
+ * 플레이어 기준: 1~5행이 상대 진영, 6~10행이 내 진영, 10행이 내 맨 뒷줄.
+ * 초는 아래쪽(코드 9행)이 맨 뒷줄, 한은 위쪽(코드 0행)이 맨 뒷줄이라 계산이 반대다.
+ */
+export function toBoardRow(team: Team, playerRow: number): number {
+    return team === 'cho' ? playerRow - 1 : ROWS - playerRow;
 }
 
 /** 좌표가 판 안에 있는지 */

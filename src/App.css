@@ -117,3 +117,102 @@ button:disabled {
 .target-ring { fill: none; stroke: rgba(200, 40, 40, 0.75); stroke-width: 4; }
 
 .hit { fill: transparent; cursor: pointer; }
+
+/* ── 증강: 판 + 좌우 패널 ── */
+.game-main {
+    display: grid;
+    grid-template-columns: 200px minmax(0, 520px) 200px;
+    gap: 16px;
+    align-items: start;
+    width: 100%;
+    max-width: 968px;
+}
+.augment-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.augment-panel h2 {
+    margin: 0;
+    font-size: 15px;
+}
+.augment-panel h2.cho { color: #1f6f43; }
+.augment-panel h2.han { color: #b3261e; }
+.augment-empty {
+    margin: 0;
+    font-size: 13px;
+    color: #8a7a60;
+}
+
+/* 화면이 좁으면 판을 위에, 패널 두 개를 아래에 나란히 */
+@media (max-width: 900px) {
+    .game-main {
+        grid-template-columns: 1fr 1fr;
+        max-width: 520px;
+    }
+    .game-main .board {
+        grid-column: 1 / -1;
+        order: -1;
+    }
+}
+
+/* ── 증강 카드 ── */
+.augment-card {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 12px;
+    border: 2px solid #c9a96a;
+    border-radius: 10px;
+    background: #fffaf0;
+    color: #3a2a12;
+    text-align: left;
+    font: inherit;
+}
+.augment-card.phase-opening { border-color: #5b8bd6; }
+.augment-card.phase-middle { border-color: #d69a3b; }
+.augment-card.phase-end { border-color: #b34ad6; }
+.augment-card.clickable { cursor: pointer; transition: transform 0.1s; }
+.augment-card.clickable:hover { transform: translateY(-3px); }
+.augment-card.compact { padding: 8px 10px; gap: 2px; }
+.augment-card-top {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    color: #8a7a60;
+}
+.augment-name { font-size: 16px; }
+.augment-card.compact .augment-name { font-size: 14px; }
+.augment-desc { margin: 0; font-size: 13px; line-height: 1.4; }
+.augment-card.compact .augment-desc { font-size: 12px; }
+
+/* ── 드래프트 선택 화면 ── */
+.draft-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(30, 20, 5, 0.55);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    z-index: 10;
+}
+.draft-box {
+    background: #faf7f0;
+    border-radius: 14px;
+    padding: 20px;
+    width: 100%;
+    max-width: 720px;
+    max-height: 100%;
+    overflow-y: auto;
+}
+.draft-box h2 { margin: 0 0 4px; }
+.draft-sub { margin: 0 0 16px; font-weight: 600; }
+.draft-sub.cho { color: #1f6f43; }
+.draft-sub.han { color: #b3261e; }
+.draft-timer { font-variant-numeric: tabular-nums; }
+.draft-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px;
+}

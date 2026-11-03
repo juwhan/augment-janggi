@@ -48,15 +48,37 @@ export interface Move {
     to: Position;
 }
 
+/**
+ * 증강 id. 실제 목록은 src/augments/registry.ts에 있다.
+ * 여기서는 그냥 문자열로 둔다. (game 폴더가 augments 폴더를 몰라도 되도록)
+ */
+export type AugmentId = string;
+
 /** 게임 전체 상태. getLegalMoves / applyMove / evaluate 가 이걸 주고받는다. */
 export interface GameState {
     board: Board;
     /** 지금 둘 차례인 진영 */
     turn: Team;
-    /** 지금까지 둔 수의 개수 (드래프트 타이밍 계산용) */
+    /** 지금까지 둔 수의 개수 */
     moveCount: number;
     /** 승자. 아직 안 끝났으면 null */
     winner: Team | null;
+    /** 무승부로 끝났는지 */
+    isDraw: boolean;
+
+    // ── 증강 ──
+    /** 진영별로 가진 증강 */
+    augments: Record<Team, AugmentId[]>;
+    /** 지금까지 끝난 드래프트 수 (0: 아직 없음, 1: 초반 끝, 2: 중반 끝, 3: 종반 끝) */
+    draftsDone: number;
+    /** 잡힌 주요 기물(차·포·마·상) 수, 양 진영 합계. 중반/종반 드래프트 타이밍에 쓴다 */
+    majorCaptured: number;
+
+    // ── 무승부 판정 ──
+    /** 마지막으로 말이 잡힌 뒤 둔 수 (양쪽 합계). 100이 되면(각자 50수) 무승부 */
+    quietMoves: number;
+    /** 판 모양별로 몇 번 나왔는지. 같은 판이 3번 나오면 무승부 */
+    positionCounts: Record<string, number>;
 }
 
 export const ROWS = 10;
