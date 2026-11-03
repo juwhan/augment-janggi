@@ -1,12 +1,13 @@
 // ───────────────────────────────────────────────
 // 게임 화면: 판 상태를 들고 있고, 클릭과 봇의 수를 처리한다.
 // ───────────────────────────────────────────────
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { createInitialState, getPiece } from '../game/board';
 import { getLegalMoves } from '../game/moves';
 import { applyMove } from '../game/apply';
 import type { Position } from '../game/types';
 import { BOT_LEVELS } from '../bot';
+import type { BotRequest, BotResponse } from '../bot/bot.worker';
 import { BoardView } from './BoardView';
 import type { GameSettings } from './StartScreen';
 
@@ -39,21 +40,51 @@ export function Game({ settings, onExit }: GameProps) {
     const legalMoves = useMemo(() => getLegalMoves(state), [state]);
     const selectedMoves = selected ? legalMoves.filter((m) => samePos(m.from, selected)) : [];
 
+    // ── 봇 작업자(Web Worker) 준비 ──
+    // 게임 화면이 열릴 때 한 번 만들고, 닫힐 때 없앤다.
+    // useRef: 화면을 다시 그려도 값이 유지되는 상자. (useState와 달리 바꿔도 화면을 다시 그리지 않는다)
+    const workerRef = useRef<Worker | null>(null);
+    const requestIdRef = useRef(0);
+
+    useEffect(() => {
+        const worker = new Worker(new URL('../bot/bot.worker.ts', import.meta.url), { type: 'module' });
+        workerRef.current = worker;
+        return () => worker.terminate();
+    }, []);
+
     // ── 봇 차례 처리 ──
     // useEffect: "state가 바뀐 뒤에" 실행되는 코드.
-    // 봇 차례가 되면 잠깐 기다렸다가 봇에게 수를 물어보고 적용한다.
+    // 봇 차례가 되면 작업자에게 계산을 맡기고, 답이 오면 적용한다.
     useEffect(() => {
-        if (!isBotTurn) return;
+        const worker = workerRef.current;
+        if (!isBotTurn || !worker) return;
 
-        const timer = setTimeout(() => {
-            const move = levelInfo.bot!(state);
-            if (move) setState(applyMove(state, move));
-        }, BOT_DELAY_MS);
+        const id = ++requestIdRef.current; // 이번 요청 번호
+        const startedAt = Date.now();
+        let cancelled = false;
+        let timer: ReturnType<typeof setTimeout> | undefined;
 
-        // 정리 함수: 기다리는 도중에 화면을 나가거나 state가 바뀌면 예약을 취소한다.
-        // 이게 없으면 처음 화면으로 나갔는데 봇이 뒤늦게 수를 두려는 문제가 생긴다.
-        return () => clearTimeout(timer);
-    }, [isBotTurn, state, levelInfo]);
+        worker.onmessage = (event: MessageEvent<BotResponse>) => {
+            // 예전 요청의 답장이거나(다시 하기를 눌렀다든지), 이미 취소됐으면 무시한다.
+            if (event.data.id !== id || cancelled) return;
+
+            // 계산이 너무 빨리 끝났으면 최소 BOT_DELAY_MS까지는 기다렸다 둔다. (생각하는 척)
+            const wait = Math.max(0, BOT_DELAY_MS - (Date.now() - startedAt));
+            timer = setTimeout(() => {
+                const move = event.data.move;
+                if (move) setState(applyMove(state, move));
+            }, wait);
+        };
+
+        const request: BotRequest = { id, level: settings.level, state };
+        worker.postMessage(request);
+
+        // 정리 함수: 기다리는 도중에 화면을 나가거나 state가 바뀌면 이 요청을 취소한다.
+        return () => {
+            cancelled = true;
+            clearTimeout(timer);
+        };
+    }, [isBotTurn, state, settings.level]);
 
     // ── 클릭 처리 ──
     function handleClick(pos: Position) {

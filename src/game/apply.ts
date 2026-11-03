@@ -18,8 +18,14 @@ import type { GameState, Move } from './types';
  *
  * 주의: 이 함수는 move가 규칙상 가능한지 검사하지 않는다.
  *       getLegalMoves에서 나온 수만 넣는다고 가정한다.
+ *
+ * checkNoMoves: 6번 "상대가 둘 수 없으면 패배" 검사를 할지 (기본값 true)
+ *   이 검사는 상대의 모든 수를 한 번 더 계산해서 꽤 비싸다.
+ *   4~5단계 봇은 탐색 중에 수십만 번 이 함수를 부르는데, 어차피 다음 단계에서
+ *   getLegalMoves를 직접 부르니 같은 계산을 두 번 하게 된다. 그래서 봇은 false로 끄고,
+ *   "둘 수 없음"을 탐색 안에서 직접 처리한다.
  */
-export function applyMove(state: GameState, move: Move): GameState {
+export function applyMove(state: GameState, move: Move, checkNoMoves = true): GameState {
     // 이미 끝난 게임이면 아무것도 바꾸지 않는다.
     if (state.winner !== null) return state;
 
@@ -55,7 +61,7 @@ export function applyMove(state: GameState, move: Move): GameState {
     // 6. [추가] 상대가 둘 수 있는 수가 하나도 없으면, 지금 둔 쪽이 이긴다.
     //    (증강 체스처럼 "움직일 수 없으면 패배" 규칙. 스테일메이트가 없다)
     //    이 검사가 없으면 봇이 둘 수가 없는데 차례가 넘어와서 게임이 멈춰버린다.
-    if (next.winner === null && getLegalMoves(next).length === 0) {
+    if (checkNoMoves && next.winner === null && getLegalMoves(next).length === 0) {
         next.winner = state.turn;
     }
 
