@@ -1,0 +1,19 @@
+// Cloudflare 서버 설정 파일
+// - main: 서버의 시작 파일
+// - durable_objects: 로비(방 목록) 1개, 게임 방(방마다 1개)
+// - migrations: Durable Object를 처음 만들 때 필요한 기록 (무료 플랜은 SQLite 방식만 가능)
+{
+    "$schema": "../node_modules/wrangler/config-schema.json",
+    "name": "augment-janggi-server",
+    "main": "src/index.ts",
+    "compatibility_date": "2026-11-01",
+    "durable_objects": {
+        "bindings": [
+            { "name": "LOBBY", "class_name": "Lobby" },
+            { "name": "ROOM", "class_name": "GameRoom" }
+        ]
+    },
+    "migrations": [
+        { "tag": "v1", "new_sqlite_classes": ["Lobby", "GameRoom"] }
+    ]
+}

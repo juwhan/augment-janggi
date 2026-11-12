@@ -317,3 +317,180 @@ button:disabled {
     background: transparent;
     border-style: dashed;
 }
+
+/* ── 온라인: 로비 ── */
+.online-lobby,
+.online-room {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    max-width: 480px;
+}
+.online-room.playing { max-width: none; }
+.online-room h2 { margin: 0; }
+.lobby-box {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    width: 100%;
+    padding: 16px;
+    border: 1px solid #d8c6a0;
+    border-radius: 12px;
+    background: #fffaf0;
+    box-sizing: border-box;
+}
+.lobby-box h2 { margin: 0; font-size: 17px; }
+.lobby-box input[type='text'],
+.lobby-box input:not([type]) {
+    font: inherit;
+    padding: 8px 10px;
+    border: 1px solid #b89a6a;
+    border-radius: 8px;
+    min-width: 0;
+    flex: 1;
+}
+.row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+.check {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    font-size: 14px;
+}
+.room-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.room-list li {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 8px 10px;
+    border: 1px solid #e3d3b0;
+    border-radius: 8px;
+    background: #fff;
+}
+.room-list li > div,
+.room-list li > span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+button.primary {
+    background: #5a3e1b;
+    color: #fffaf0;
+    font-weight: 600;
+}
+button.danger {
+    background: #b3261e;
+    border-color: #b3261e;
+    color: #fff;
+}
+button.link {
+    border: none;
+    background: none;
+    padding: 0 4px;
+    color: #5b6fd6;
+    text-decoration: underline;
+}
+.error { margin: 0; color: #b3261e; font-size: 14px; }
+
+/* ── 온라인: 대기실 / 진영 고르기 ── */
+.room-code {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.room-code strong {
+    font-size: 32px;
+    letter-spacing: 6px;
+    font-family: ui-monospace, monospace;
+}
+.side-buttons {
+    display: flex;
+    gap: 12px;
+}
+button.side {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    width: 140px;
+    padding: 14px;
+    font-weight: 600;
+}
+button.side .side-mark { font-size: 36px; font-family: serif; }
+button.side.cho { color: #1f6f43; border-color: #1f6f43; }
+button.side.han { color: #b3261e; border-color: #b3261e; }
+button.side.cho.active { background: #1f6f43; color: #fff; }
+button.side.han.active { background: #b3261e; color: #fff; }
+button.active-any { background: #5a3e1b; color: #fffaf0; }
+.banner {
+    margin: 0;
+    padding: 6px 12px;
+    border-radius: 8px;
+    background: #eef3ff;
+    font-size: 14px;
+}
+.banner.warn { background: #fff1d6; color: #7a4a00; }
+.status.draw { color: #6b5a40; }
+.status.hurry { color: #d4380d; }
+
+/* ── 온라인: 동전 던지기 ── */
+.coin-flip {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+}
+.coin-stage { perspective: 600px; padding: 20px; }
+.coin {
+    position: relative;
+    width: 120px;
+    height: 120px;
+    transform-style: preserve-3d;
+    animation: coin-spin 2.2s cubic-bezier(0.2, 0.7, 0.3, 1) forwards;
+}
+@keyframes coin-spin {
+    0% { transform: translateY(0) rotateY(0deg); }
+    40% { transform: translateY(-50px) rotateY(calc(var(--coin-end) * 0.6)); }
+    100% { transform: translateY(0) rotateY(var(--coin-end)); }
+}
+.coin-face {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    font-size: 60px;
+    font-family: serif;
+    font-weight: 700;
+    color: #fff;
+    backface-visibility: hidden;
+    border: 6px solid #d4a017;
+    box-sizing: border-box;
+    box-shadow: inset 0 0 0 3px rgba(255, 255, 255, 0.35);
+}
+.coin-face.cho { background: #1f6f43; }
+.coin-face.han { background: #b3261e; transform: rotateY(180deg); }
+.coin-result {
+    margin: 0;
+    font-size: 17px;
+    opacity: 0;
+    animation: fade-in 0.4s 2.2s forwards;
+}
+.coin-result strong.cho { color: #1f6f43; }
+.coin-result strong.han { color: #b3261e; }
+@keyframes fade-in { to { opacity: 1; } }
+
+@media (max-width: 480px) {
+    button.side { width: 120px; }
+    .room-code strong { font-size: 26px; }
+}

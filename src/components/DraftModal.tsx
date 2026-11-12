@@ -21,10 +21,17 @@ interface DraftModalProps {
     offers: AugmentId[];        // 이 진영에게 나온 카드
     waitingText?: string;       // 고른 뒤 상대를 기다릴 때 보여줄 문구 (없으면 고르는 화면)
     onPick: (pick: DraftPick | null) => void;
+    /**
+     * 온라인 대전용: 서버가 정한 마감 시각 (이 브라우저 시계 기준, 밀리초).
+     * 주어지면 남은 시간을 이 시각으로 계산하고, 시간이 다 돼도 직접 고르지 않는다 (서버가 무작위로 고른다).
+     */
+    deadline?: number;
 }
 
-export function DraftModal({ phase, team, offers, waitingText, onPick }: DraftModalProps) {
-    const [secondsLeft, setSecondsLeft] = useState(DRAFT_SECONDS);
+export function DraftModal({ phase, team, offers, waitingText, onPick, deadline }: DraftModalProps) {
+    const [secondsLeft, setSecondsLeft] = useState(
+        deadline ? Math.max(0, Math.ceil((deadline - Date.now()) / 1000)) : DRAFT_SECONDS,
+    );
     // 선택지가 있는 카드(자유 상차림)를 누르면, 선택지를 고르는 단계로 넘어간다
     const [choosing, setChoosing] = useState<AugmentId | null>(null);
 
@@ -34,23 +41,33 @@ export function DraftModal({ phase, team, offers, waitingText, onPick }: DraftMo
         else onPick({ id, choice: 0 });
     }
 
-    // 1초마다 남은 시간을 줄이고, 0이 되면 무작위로 고른다.
+    // 온라인: 서버 마감 시각을 기준으로 남은 시간만 다시 계산한다
     useEffect(() => {
-        if (waitingText) return;
+        if (!deadline) return;
+        const timer = setInterval(() => setSecondsLeft(Math.max(0, Math.ceil((deadline - Date.now()) / 1000))), 250);
+        return () => clearInterval(timer);
+    }, [deadline]);
+
+    // 혼자 두기: 1초마다 남은 시간을 줄이고, 0이 되면 무작위로 고른다.
+    useEffect(() => {
+        if (waitingText || deadline) return;
         if (secondsLeft <= 0) {
             onPick(randomPick(offers));
             return;
         }
         const timer = setTimeout(() => setSecondsLeft((s) => s - 1), 1000);
         return () => clearTimeout(timer);
-    }, [secondsLeft, waitingText, offers, onPick]);
+    }, [secondsLeft, waitingText, offers, onPick, deadline]);
 
     return (
         <div className="draft-overlay" role="dialog" aria-modal="true" aria-label={`${PHASE_NAME[phase]} 증강 선택`}>
             <div className="draft-box">
                 <h2>{PHASE_NAME[phase]} 증강 선택</h2>
                 {waitingText ? (
-                    <p className="draft-sub">{waitingText}</p>
+                    <p className="draft-sub">
+                        {waitingText}
+                        {deadline && <> · <span className="draft-timer">{secondsLeft}초</span></>}
+                    </p>
                 ) : (
                     <>
                         <p className={`draft-sub ${team}`}>

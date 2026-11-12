@@ -8,7 +8,7 @@ import type { Team } from '../game/types';
 
 /** 게임 설정: 시작 화면에서 정해서 Game에 넘긴다 */
 export interface GameSettings {
-    mode: 'bot' | 'friend'; // 봇과 대전 / 친구와 한 화면에서
+    mode: 'bot' | 'friend' | 'online'; // 봇과 대전 / 친구와 한 화면에서 / 온라인 1대1
     playerTeam: Team;       // 봇 대전일 때 내 진영 (초가 먼저 둔다)
     level: number;          // 봇 난이도 (1~5)
 }
@@ -33,6 +33,9 @@ export function StartScreen({ onStart }: StartScreenProps) {
                     </button>
                     <button className={mode === 'friend' ? 'active' : ''} onClick={() => setMode('friend')}>
                         친구와 플레이
+                    </button>
+                    <button className={mode === 'online' ? 'active' : ''} onClick={() => setMode('online')}>
+                        온라인 대전
                     </button>
                 </div>
             </div>
@@ -71,8 +74,13 @@ export function StartScreen({ onStart }: StartScreenProps) {
                 </>
             )}
 
+            {/* 온라인 대전은 진영을 방 안에서 정한다 */}
+            {mode === 'online' && (
+                <p className="info">다른 사람과 인터넷으로 1대1 대국을 해요. 진영은 방에 들어간 뒤 정해요.</p>
+            )}
+
             <button className="start-button" onClick={() => onStart({ mode, playerTeam, level })}>
-                게임 시작
+                {mode === 'online' ? '로비로 가기' : '게임 시작'}
             </button>
         </section>
     );

@@ -22,3 +22,8 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Cloudflare 서버 로컬 실행 파일
+.wrangler
+server/.wrangler
+.dev.vars
