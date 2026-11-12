@@ -5,7 +5,7 @@
 // ───────────────────────────────────────────────
 import { PIECE_LABEL } from '../game/board';
 import { COLS, ROWS } from '../game/types';
-import type { Board, PieceType, Position, Trap } from '../game/types';
+import type { Board, Move, PieceType, Position, Trap } from '../game/types';
 
 // 판 크기 설정 (단위: SVG 좌표. 실제 화면 크기는 CSS가 맞춰준다)
 const GAP = 56;      // 선과 선 사이 간격
@@ -37,11 +37,12 @@ interface BoardViewProps {
     protectedIds?: Set<string>;        // 수호 중인 말 id
     checkedGeneral?: Position | null;  // 장군을 받고 있는 궁 위치
     flash?: { text: string; key: number; team: string } | null; // 판 위에 잠깐 뜨는 글자 (장군!/멍군!)
+    lastMove?: Move | null;            // 직전 수 (말이 원래 있던 칸에 흔적을 남긴다)
 }
 
 export function BoardView({
     board, selected, targets, onClick, flipped = false,
-    traps = [], frozenIds, protectedIds, checkedGeneral = null, flash = null,
+    traps = [], frozenIds, protectedIds, checkedGeneral = null, flash = null, lastMove = null,
 }: BoardViewProps) {
     // (row, col) → 화면 좌표(x, y). 말은 칸 안이 아니라 "선이 만나는 점" 위에 놓인다.
     // 뒤집을 때는 행/열 번호를 반대로 센다. (0행 → 9행 자리, 0열 → 8열 자리)
@@ -73,6 +74,12 @@ export function BoardView({
                 <line x1={toX(3)} y1={toY(7)} x2={toX(5)} y2={toY(9)} />
                 <line x1={toX(5)} y1={toY(7)} x2={toX(3)} y2={toY(9)} />
             </g>
+
+            {/* 3-0. 직전 수의 흔적: 말이 원래 있던 칸(출발 칸)에 점선 원을 남긴다.
+                     증강 사용처럼 출발과 도착이 같은 칸이면 남기지 않는다. */}
+            {lastMove && (lastMove.from.row !== lastMove.to.row || lastMove.from.col !== lastMove.to.col) && (
+                <circle className="last-from" cx={toX(lastMove.from.col)} cy={toY(lastMove.from.row)} r={14} />
+            )}
 
             {/* 3-1. 함정: 설치한 진영 색깔의 X 표시 */}
             {traps.map((t) => (

@@ -14,7 +14,15 @@ import type { AugmentId, Board, GameState, PieceType, Team } from '../game/types
 export type AugmentPhase = 'opening' | 'middle' | 'end';
 
 /** 증강 유형 (화면 표시용) */
-export type AugmentKind = '즉시' | '패시브' | '발동형' | '승리 조건' | '액티브';
+/**
+ * 증강 유형 (카드에 표시된다)
+ * - 시작 시 적용: 고르는 순간 판이 바뀐다
+ * - 항상 적용: 고른 뒤 계속 효과가 있다
+ * - 조건 발동: 정해진 상황이 되면 저절로 효과가 생긴다
+ * - 한 번 사용: 원하는 내 차례에 "사용" 버튼을 눌러 한 판에 한 번 쓴다
+ * - 승리 조건: 궁을 잡는 것 말고 이기는 방법이 하나 더 생긴다
+ */
+export type AugmentKind = '시작 시 적용' | '항상 적용' | '조건 발동' | '한 번 사용' | '승리 조건';
 
 export interface AugmentDef {
     id: AugmentId;
@@ -27,8 +35,19 @@ export interface AugmentDef {
      * 대략 "말 몇 점 정도의 가치인가"로 매겼다. 밸런스를 보며 조정한다.
      */
     botValue: number;
-    /** 즉시형: 고르는 순간 내 진영의 판을 바꾼다 (board는 이미 복사본이라 직접 고쳐도 된다) */
-    onPick?: (board: Board, team: Team) => void;
+    /**
+     * 시작 시 적용: 고르는 순간 내 진영의 판을 바꾼다 (board는 이미 복사본이라 직접 고쳐도 된다)
+     * choice: 선택지가 있는 증강(자유 상차림)에서 고른 선택지 번호
+     */
+    onPick?: (board: Board, team: Team, choice: number) => void;
+    /** 고른 뒤 한 번 더 고르는 선택지 (예: 자유 상차림의 배치 4가지). 없으면 바로 적용 */
+    choices?: string[];
+}
+
+/** 드래프트에서 한 사람이 고른 것: 증강 + (선택지가 있으면) 선택지 번호 */
+export interface DraftPick {
+    id: AugmentId;
+    choice: number;
 }
 
 // ── 판 바꾸기 도우미 ──
@@ -53,35 +72,49 @@ function place(board: Board, team: Team, type: PieceType, playerRow: number, col
     }
 }
 
+/**
+ * 자유 상차림의 배치 4가지.
+ * 내 쪽에서 바라본 맨 뒷줄의 왼쪽 두 칸(2·3번째 칸)과 오른쪽 두 칸(7·8번째 칸)에 놓을 말.
+ */
+const SETUPS: { label: string; left: [PieceType, PieceType]; right: [PieceType, PieceType] }[] = [
+    { label: '마상 · 상마 (기본)', left: ['horse', 'elephant'], right: ['elephant', 'horse'] },
+    { label: '상마 · 마상', left: ['elephant', 'horse'], right: ['horse', 'elephant'] },
+    { label: '마상 · 마상', left: ['horse', 'elephant'], right: ['horse', 'elephant'] },
+    { label: '상마 · 상마', left: ['elephant', 'horse'], right: ['elephant', 'horse'] },
+];
+
+/** 내 쪽에서 본 열 번호(0~8, 왼쪽부터) → 코드의 열 번호. 한은 판 반대편에 앉아 있어서 좌우가 뒤집힌다 */
+const toBoardCol = (team: Team, playerCol: number) => (team === 'cho' ? playerCol : 8 - playerCol);
+
 export const AUGMENTS: AugmentDef[] = [
     // ─────────── 초반 ───────────
     {
-        id: AUG.PAWN_ADVANCE, name: '졸 전진', phase: 'opening', kind: '즉시', botValue: 1,
-        description: '가운데 졸 3개가 한 칸 앞에서 시작한다',
+        id: AUG.PAWN_ADVANCE, name: '졸 전진', phase: 'opening', kind: '시작 시 적용', botValue: 1,
+        description: '가운데 졸 3개가 한 칸 앞으로 나간 자리에서 시작한다',
         onPick: (board, team) => {
             for (const col of [2, 4, 6]) shift(board, team, 'soldier', 7, 6, col);
         },
     },
     {
-        id: AUG.VANGUARD_CHARIOT, name: '선봉 차', phase: 'opening', kind: '즉시', botValue: 1.5,
-        description: '내 차 두 개가 한 칸 앞에서 시작한다',
+        id: AUG.VANGUARD_CHARIOT, name: '선봉 차', phase: 'opening', kind: '시작 시 적용', botValue: 1.5,
+        description: '양쪽 끝의 내 차 2개가 한 칸 앞으로 나간 자리에서 시작한다',
         onPick: (board, team) => {
             for (const col of [0, 8]) shift(board, team, 'chariot', 10, 9, col);
         },
     },
     {
-        id: AUG.SPARE_CANNON, name: '예비 포', phase: 'opening', kind: '즉시', botValue: 7,
-        description: '궁 바로 뒤 빈 칸에 포를 하나 더 놓는다',
+        id: AUG.SPARE_CANNON, name: '예비 포', phase: 'opening', kind: '시작 시 적용', botValue: 7,
+        description: '내 궁 바로 뒤의 빈 칸(맨 뒷줄 가운데)에 포를 하나 더 놓고 시작한다',
         onPick: (board, team) => place(board, team, 'cannon', 10, 4, 'spare'),
     },
     {
-        id: AUG.SPARE_SOLDIER, name: '예비 졸', phase: 'opening', kind: '즉시', botValue: 2,
-        description: '궁성 앞 가운데 빈 칸에 졸을 하나 더 놓는다',
+        id: AUG.SPARE_SOLDIER, name: '예비 졸', phase: 'opening', kind: '시작 시 적용', botValue: 2,
+        description: '내 궁성 바로 앞 가운데 빈 칸에 졸을 하나 더 놓고 시작한다',
         onPick: (board, team) => place(board, team, 'soldier', 8, 4, 'spare'),
     },
     {
-        id: AUG.SOLDIER_ARMY, name: '졸 대군', phase: 'opening', kind: '즉시', botValue: 0,
-        description: '궁만 남기고 내 기물을 모두 치운 뒤, 내 진영 전체(6~10행)에 졸을 체크무늬로 23개 놓는다',
+        id: AUG.SOLDIER_ARMY, name: '졸 대군', phase: 'opening', kind: '시작 시 적용', botValue: 0,
+        description: '궁만 남기고 내 말을 모두 없앤 뒤, 내 진영 전체(6~10행)에 졸 23개를 한 칸씩 띄운 체크무늬로 놓는다',
         onPick: (board, team) => {
             // 1. 궁을 뺀 내 말을 모두 치운다
             for (const row of board) {
@@ -99,116 +132,156 @@ export const AUGMENTS: AugmentDef[] = [
         },
     },
     {
-        id: AUG.CANNON_BRIDGE, name: '포의 다리', phase: 'opening', kind: '패시브', botValue: 2,
-        description: '내 포는 포를 넘을 수 있다 (포를 잡는 건 여전히 불가)',
+        id: AUG.FREE_SETUP, name: '자유 상차림', phase: 'opening', kind: '시작 시 적용', botValue: 0.5,
+        description: '게임 시작 전에 내 마와 상의 위치를 4가지 배치 중 하나로 다시 고른다',
+        choices: SETUPS.map((s) => s.label),
+        onPick: (board, team, choice) => {
+            const setup = SETUPS[choice] ?? SETUPS[0];
+            const row = toBoardRow(team, 10);
+            const slots: [number, PieceType][] = [
+                [1, setup.left[0]], [2, setup.left[1]], [6, setup.right[0]], [7, setup.right[1]],
+            ];
+            // 그 자리에 있는 내 마·상만 종류를 바꾼다 (졸 대군 등으로 이미 비어 있으면 건드리지 않는다)
+            for (const [playerCol, type] of slots) {
+                const col = toBoardCol(team, playerCol);
+                const p = board[row][col];
+                if (p && p.team === team && (p.type === 'horse' || p.type === 'elephant')) {
+                    board[row][col] = { ...p, type };
+                }
+            }
+        },
     },
     {
-        id: AUG.ARMORED_HORSE, name: '철갑마', phase: 'opening', kind: '패시브', botValue: 3,
-        description: '내 마는 멱이 막혀도 이동할 수 있다',
+        id: AUG.NIMBLE_ELEPHANT, name: '날랜 상', phase: 'opening', kind: '항상 적용', botValue: 1.5,
+        description: '원래 상은 지나가는 두 칸 중 하나라도 막히면 못 가지만, 내 상은 첫 번째 칸이 막혀 있어도 이동할 수 있다 (두 번째 칸은 비어 있어야 함)',
+    },
+    {
+        id: AUG.ROYAL_GUARD, name: '근위대', phase: 'opening', kind: '항상 적용', botValue: 1,
+        description: '원래 사는 궁성(궁이 있는 3×3 구역) 안에서만 움직이지만, 내 사는 궁성 바로 바깥의 한 칸까지 나갈 수 있다',
+    },
+    {
+        id: AUG.GENERAL_SPIRIT, name: '장수의 기백', phase: 'opening', kind: '항상 적용', botValue: 1,
+        description: '내 궁이 궁성 안에서 차처럼 한 방향으로 여러 칸을 이동할 수 있다 (궁성 밖으로는 못 나감)',
+    },
+    {
+        id: AUG.IRON_PALACE, name: '철벽 궁성', phase: 'opening', kind: '항상 적용', botValue: 1.5,
+        description: '내 궁성 안에 있는 내 말은 상대 포에게 잡히지 않는다',
+    },
+    {
+        id: AUG.MOBILE_SOLDIER, name: '기동졸', phase: 'opening', kind: '항상 적용', botValue: 1,
+        description: '아직 처음 줄(7행)에 있는 내 졸은 앞으로 두 칸 이동할 수 있다 (바로 앞 칸이 비어 있어야 함)',
+    },
+    {
+        id: AUG.CANNON_BRIDGE, name: '포의 다리', phase: 'opening', kind: '항상 적용', botValue: 2,
+        description: '원래 포는 다른 포를 뛰어넘을 수 없지만, 내 포는 포도 뛰어넘을 수 있다. 포를 잡는 것은 여전히 안 된다',
+    },
+    {
+        id: AUG.ARMORED_HORSE, name: '철갑마', phase: 'opening', kind: '항상 적용', botValue: 3,
+        description: '원래 마는 처음 한 칸 가는 길에 다른 말이 있으면 못 가지만, 내 마는 그 길이 막혀 있어도 이동할 수 있다',
     },
 
     // ─────────── 중반 ───────────
     {
-        id: AUG.SWIFT_HORSE, name: '질주마', phase: 'middle', kind: '패시브', botValue: 2,
-        description: '내 마는 직선 두 칸 이동도 할 수 있다 (중간 칸이 막히면 불가)',
+        id: AUG.SWIFT_HORSE, name: '질주마', phase: 'middle', kind: '항상 적용', botValue: 2,
+        description: '내 마는 원래 이동 외에 앞뒤좌우로 곧장 두 칸도 갈 수 있다 (바로 앞 칸은 비어 있어야 함)',
     },
     {
-        id: AUG.WIDE_ELEPHANT, name: '넓은 상', phase: 'middle', kind: '패시브', botValue: 2,
-        description: '내 상은 대각선 한 칸 이동도 할 수 있다',
+        id: AUG.WIDE_ELEPHANT, name: '넓은 상', phase: 'middle', kind: '항상 적용', botValue: 2,
+        description: '내 상은 원래 이동 외에 대각선으로 한 칸도 갈 수 있다',
     },
     {
-        id: AUG.CHARIOT_LEAP, name: '차의 도약', phase: 'middle', kind: '패시브', botValue: 3,
-        description: '내 차는 내 말 하나를 뛰어넘을 수 있다',
+        id: AUG.CHARIOT_LEAP, name: '차의 도약', phase: 'middle', kind: '항상 적용', botValue: 3,
+        description: '원래 차는 다른 말을 넘을 수 없지만, 내 차는 내 말 하나를 뛰어넘어 계속 갈 수 있다 (상대 말은 못 넘음)',
     },
     {
-        id: AUG.REVENGE, name: '반격', phase: 'middle', kind: '발동형', botValue: 4,
-        description: '내 차가 잡히면 잡은 상대 말도 함께 사라진다 (궁 제외)',
+        id: AUG.REVENGE, name: '반격', phase: 'middle', kind: '조건 발동', botValue: 4,
+        description: '상대가 내 차를 잡으면, 잡으러 온 상대 말도 함께 사라진다 (상대 궁이 잡은 경우는 제외)',
     },
     {
-        id: AUG.BLAST_CANNON, name: '폭렬포', phase: 'middle', kind: '패시브', botValue: 4,
-        description: '내 포가 잡지 않고 이동하면 도착 칸 상하좌우의 말이 피아 구분 없이 사라진다. 궁성 안 칸과 궁은 피해가 없다',
+        id: AUG.BLAST_CANNON, name: '폭렬포', phase: 'middle', kind: '항상 적용', botValue: 4,
+        description: '내 포가 상대 말을 잡지 않고 빈 칸으로 이동하면, 도착한 칸의 위·아래·왼쪽·오른쪽 4칸에 있는 말이 내 말·상대 말 상관없이 모두 사라진다. 궁성 안의 칸과 궁은 피해를 입지 않는다',
     },
     {
-        id: AUG.CANNON_STRIKE, name: '포격', phase: 'middle', kind: '액티브', botValue: 3,
-        description: '1회: 내 포 하나가 받침 없이 차처럼 직선으로 이동·공격한다 (포와 궁은 못 잡음)',
+        id: AUG.CANNON_STRIKE, name: '포격', phase: 'middle', kind: '한 번 사용', botValue: 3,
+        description: '내 포 하나가 다른 말을 뛰어넘지 않고 차처럼 곧장 이동하거나 상대 말을 잡는다 (포와 궁은 잡을 수 없음)',
     },
     {
-        id: AUG.FREEZE, name: '빙결', phase: 'middle', kind: '액티브', botValue: 2,
-        description: '1회: 상대 말 하나(궁 제외)를 상대의 다음 차례 동안 못 움직이게 한다',
+        id: AUG.FREEZE, name: '빙결', phase: 'middle', kind: '한 번 사용', botValue: 2,
+        description: '상대 말 하나(궁 제외)를 골라, 상대의 바로 다음 차례에 그 말을 움직일 수 없게 한다',
     },
     {
-        id: AUG.PROTECT, name: '수호', phase: 'middle', kind: '액티브', botValue: 2,
-        description: '1회: 내 말 하나가 상대의 다음 2번의 차례 동안 잡히지 않는다',
+        id: AUG.PROTECT, name: '수호', phase: 'middle', kind: '한 번 사용', botValue: 2,
+        description: '내 말 하나를 골라, 상대가 앞으로 두 번 두는 동안 그 말이 잡히지 않게 한다',
     },
     {
-        id: AUG.SWAP, name: '자리 바꾸기', phase: 'middle', kind: '액티브', botValue: 2,
-        description: '1회: 궁을 제외한 내 말 두 개의 위치를 바꾼다',
+        id: AUG.SWAP, name: '자리 바꾸기', phase: 'middle', kind: '한 번 사용', botValue: 2,
+        description: '궁이 아닌 내 말 두 개를 골라 서로 위치를 바꾼다',
     },
     {
-        id: AUG.PROMOTE, name: '승급', phase: 'middle', kind: '액티브', botValue: 3,
-        description: '1회: 강을 건넌 내 졸 하나를 차로 바꾼다',
+        id: AUG.PROMOTE, name: '승급', phase: 'middle', kind: '한 번 사용', botValue: 3,
+        description: '판 가운데를 넘어 상대 진영(1~5행)에 들어간 내 졸 하나를 차로 바꾼다',
     },
     {
-        id: AUG.REINFORCE, name: '병력 보충', phase: 'middle', kind: '액티브', botValue: 1.5,
-        description: '1회: 잡힌 내 졸 하나를 내 졸 시작 줄(7행) 빈 칸에 되살린다',
+        id: AUG.REINFORCE, name: '병력 보충', phase: 'middle', kind: '한 번 사용', botValue: 1.5,
+        description: '잡혔던 내 졸 하나를 졸이 처음 서 있던 줄(7행)의 빈 칸에 다시 놓는다',
     },
     {
-        id: AUG.TRAP, name: '함정', phase: 'middle', kind: '액티브', botValue: 2,
-        description: '1회: 빈 칸 하나에 함정을 설치한다(양쪽에 보임). 상대 말이 들어오면 그 말이 사라진다',
+        id: AUG.TRAP, name: '함정', phase: 'middle', kind: '한 번 사용', botValue: 2,
+        description: '빈 칸 하나에 함정을 놓는다. 함정은 양쪽 모두에게 보이고, 상대 말이 그 칸에 들어오면 그 말이 사라진다',
     },
     {
-        id: AUG.DOUBLE_MOVE, name: '연속 행동', phase: 'middle', kind: '액티브', botValue: 3,
-        description: '1회: 이번 차례에 말 하나를 두 번 움직인다 (두 번째 이동은 잡기 불가)',
+        id: AUG.DOUBLE_MOVE, name: '연속 행동', phase: 'middle', kind: '한 번 사용', botValue: 3,
+        description: '이번 차례에 말 하나를 움직인 뒤, 같은 말로 한 번 더 움직인다. 두 번째 이동으로는 상대 말을 잡을 수 없다',
     },
     {
-        id: AUG.ASSAULT_SOLDIER, name: '돌격졸', phase: 'middle', kind: '발동형', botValue: 3,
-        description: '내 졸이 말을 잡으면 그 졸이 한 번 더 움직인다. 한 차례에 한 번만, 연쇄되지 않는다',
+        id: AUG.ASSAULT_SOLDIER, name: '돌격졸', phase: 'middle', kind: '조건 발동', botValue: 3,
+        description: '내 졸이 상대 말을 잡으면 그 졸이 바로 한 번 더 움직일 수 있다. 한 차례에 한 번만 생기고, 더 움직이며 또 잡아도 이어지지 않는다',
     },
 
     // ─────────── 종반 ───────────
     {
-        id: AUG.GENERAL_SORTIE, name: '궁의 출정', phase: 'end', kind: '패시브', botValue: 1,
-        description: '내 궁이 궁성 밖으로 나갈 수 있다',
+        id: AUG.GENERAL_SORTIE, name: '궁의 출정', phase: 'end', kind: '항상 적용', botValue: 1,
+        description: '원래 궁은 궁성 밖으로 못 나가지만, 내 궁은 궁성 밖으로도 한 칸씩 이동할 수 있다',
     },
     {
-        id: AUG.SOLDIER_RETREAT, name: '결사대', phase: 'end', kind: '패시브', botValue: 2,
-        description: '내 졸은 뒤로도 한 칸 이동할 수 있다',
+        id: AUG.SOLDIER_RETREAT, name: '결사대', phase: 'end', kind: '항상 적용', botValue: 2,
+        description: '원래 졸은 뒤로 못 가지만, 내 졸은 뒤로도 한 칸 이동할 수 있다',
     },
     {
-        id: AUG.CANNON_STEP, name: '포의 각성', phase: 'end', kind: '패시브', botValue: 2,
-        description: '내 포는 받침 없이 한 칸 이동할 수 있다 (잡기는 받침 필요)',
+        id: AUG.CANNON_STEP, name: '포의 각성', phase: 'end', kind: '항상 적용', botValue: 2,
+        description: '원래 포는 다른 말을 뛰어넘어야만 움직이지만, 내 포는 뛰어넘지 않고 앞뒤좌우 빈 칸으로 한 칸 이동할 수 있다 (잡을 때는 원래처럼 뛰어넘어야 함)',
     },
     {
-        id: AUG.GUARD_HORSE, name: '사의 각성', phase: 'end', kind: '패시브', botValue: 2,
-        description: '내 사는 궁성 안에서 마처럼도 이동할 수 있다',
+        id: AUG.GUARD_HORSE, name: '사의 각성', phase: 'end', kind: '항상 적용', botValue: 2,
+        description: '내 사는 궁성 안에서 마와 같은 방식으로도 이동할 수 있다 (마처럼 처음 한 칸 가는 길은 비어 있어야 함)',
     },
     {
         id: AUG.MARCH_VICTORY, name: '진군 승리', phase: 'end', kind: '승리 조건', botValue: 5,
-        description: '내 졸 하나가 상대 맨 끝 줄(1행)에 도착하면 승리한다',
+        description: '내 졸 하나가 상대 맨 뒷줄(1행)에 도착하면 그 즉시 승리한다',
     },
     {
-        id: AUG.SNIPE, name: '저격', phase: 'end', kind: '액티브', botValue: 4,
-        description: '1회: 상대 말 하나(궁·차 제외)를 제거한다',
+        id: AUG.SNIPE, name: '저격', phase: 'end', kind: '한 번 사용', botValue: 4,
+        description: '상대 말 하나(궁과 차 제외)를 판에서 없앤다',
     },
     {
-        id: AUG.BARRAGE, name: '일제 포격', phase: 'end', kind: '액티브', botValue: 3,
-        description: '1회: 가로 한 줄을 골라 그 줄의 상대 졸을 모두 제거한다',
+        id: AUG.BARRAGE, name: '일제 포격', phase: 'end', kind: '한 번 사용', botValue: 3,
+        description: '가로 한 줄을 골라, 그 줄에 있는 상대 졸을 모두 없앤다',
     },
     {
-        id: AUG.REVIVE, name: '부활', phase: 'end', kind: '액티브', botValue: 3,
-        description: '1회: 잡힌 내 말 하나(차 제외)를 내 궁성 안 빈 칸에 되살린다',
+        id: AUG.REVIVE, name: '부활', phase: 'end', kind: '한 번 사용', botValue: 3,
+        description: '잡혔던 내 말 하나(차 제외)를 내 궁성 안의 빈 칸에 다시 놓는다',
     },
     {
-        id: AUG.CHARIOT_CLONE, name: '차 분신', phase: 'end', kind: '액티브', botValue: 5,
-        description: '1회: 내 차 하나 바로 옆 빈 칸에 차를 하나 더 만든다',
+        id: AUG.CHARIOT_CLONE, name: '차 분신', phase: 'end', kind: '한 번 사용', botValue: 5,
+        description: '내 차 하나 바로 옆(위·아래·왼쪽·오른쪽) 빈 칸에 차를 하나 더 놓는다',
     },
     {
-        id: AUG.TIME_STOP, name: '시간 정지', phase: 'end', kind: '액티브', botValue: 4,
-        description: '1회: 이번 차례에 두 수를 둔다 (두 번째 수로 궁은 못 잡음)',
+        id: AUG.TIME_STOP, name: '시간 정지', phase: 'end', kind: '한 번 사용', botValue: 4,
+        description: '이번 차례에 수를 두 번 둔다. 두 번째 수로는 상대 궁을 잡을 수 없다',
     },
     {
-        id: AUG.STAND_IN, name: '대역', phase: 'end', kind: '발동형', botValue: 4,
-        description: '내 궁이 처음 잡힐 때, 궁 대신 잡으러 온 말이 사라진다 (1회)',
+        id: AUG.STAND_IN, name: '대역', phase: 'end', kind: '조건 발동', botValue: 4,
+        description: '상대가 내 궁을 처음 잡을 때, 궁은 그대로 남고 잡으러 온 상대 말이 대신 사라진다 (한 번만 발동)',
     },
 ];
 
@@ -221,11 +294,11 @@ export function getAugment(id: AugmentId): AugmentDef {
 export const PHASE_ORDER: AugmentPhase[] = ['opening', 'middle', 'end'];
 export const PHASE_NAME: Record<AugmentPhase, string> = { opening: '초반', middle: '중반', end: '종반' };
 
-/** (참고용) 상태를 받아 즉시형 증강의 효과를 적용한 새 상태를 돌려준다 */
-export function applyPick(state: GameState, team: Team, id: AugmentId): GameState {
+/** 증강을 가진 증강 목록에 넣고, 시작 시 적용 증강이면 판도 바꾼 새 상태를 돌려준다 */
+export function applyPick(state: GameState, team: Team, id: AugmentId, choice = 0): GameState {
     const def = getAugment(id);
     const board = state.board.map((row) => [...row]);
-    def.onPick?.(board, team);
+    def.onPick?.(board, team, choice);
     return {
         ...state,
         board,

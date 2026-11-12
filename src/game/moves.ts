@@ -1,5 +1,5 @@
 import type { GameState, Move, Position, Board, Piece, AugmentId, Team } from './types';
-import { inBounds, getPiece, isInPalace } from './board';
+import { inBounds, getPiece, isInPalace, toBoardRow } from './board';
 import { ROWS, COLS } from './types';
 import { AUG } from './augmentIds';
 import { findGeneral, getActiveMoves, hasEffect } from './actives';
@@ -63,6 +63,9 @@ export function getLegalMoves(state: GameState): Move[] {
                 const victim = getPiece(state.board, m.to);
                 if (victim !== null) {
                     if (hasEffect(state, 'protect', victim.id)) continue;
+                    // 철벽 궁성: 궁성 안의 말은 상대 포에게 잡히지 않는다
+                    if (target.type === 'cannon' && isInPalace(m.to)
+                        && state.augments[victim.team].includes(AUG.IRON_PALACE)) continue;
                     if (bonus && !bonus.canCapture) continue;
                     if (bonus && !bonus.canCaptureGeneral && victim.type === 'general') continue;
                 }
@@ -566,6 +569,10 @@ function getAugmentExtraMoves(board: Board, from: Position, piece: Piece, augs: 
             break;
 
         case 'elephant':
+            // 날랜 상: 지나가는 두 칸 중 첫 번째 칸이 막혀 있어도 된다 (두 번째 칸만 검사)
+            if (has(AUG.NIMBLE_ELEPHANT)) {
+                moves.push(...getJumpMoves(board, from, ELEPHANT_PATTERNS.map((p) => ({ path: [p.path[1]], to: p.to }))));
+            }
             // 넓은 상: 대각선 한 칸
             if (has(AUG.WIDE_ELEPHANT)) {
                 moves.push(...getJumpMoves(board, from, [
@@ -580,10 +587,25 @@ function getAugmentExtraMoves(board: Board, from: Position, piece: Piece, augs: 
             if (has(AUG.GENERAL_SORTIE)) {
                 for (const [dr, dc] of ORTHOGONAL) stepTo(dr, dc, (to) => !isInPalace(to));
             }
+            // 장수의 기백: 궁성 안에서 차처럼 한 방향으로 여러 칸 (궁성 밖으로는 못 나감)
+            if (has(AUG.GENERAL_SPIRIT) && isInPalace(from)) {
+                // 상하좌우 길은 궁성 안까지만 자르고, 궁성 대각선 길은 그대로 쓴다
+                const rays = getOrthogonalRays(from).map((ray) => {
+                    const end = ray.findIndex((p) => !isInPalace(p));
+                    return end === -1 ? ray : ray.slice(0, end);
+                });
+                for (const ray of [...rays, ...getPalaceDiagonalRays(from)]) {
+                    moves.push(...slideAlong(board, from, ray));
+                }
+            }
             break;
 
         case 'guard':
-            // 사의 각성: 궁성 안에서 마처럼 이동 (멱 규칙도 마와 같다)
+            // 근위대: 궁성과 궁성 바로 바깥 칸(근위 구역) 안에서 상하좌우 한 칸
+            if (has(AUG.ROYAL_GUARD)) {
+                for (const [dr, dc] of ORTHOGONAL) stepTo(dr, dc, (to) => isGuardZone(piece.team, to));
+            }
+            // 사의 각성: 궁성 안에서 마처럼 이동 (처음 한 칸 가는 길이 막히면 못 가는 것도 마와 같다)
             if (has(AUG.GUARD_HORSE)) {
                 moves.push(...getJumpMoves(board, from, HORSE_PATTERNS).filter((m) => isInPalace(m.to)));
             }
@@ -595,9 +617,29 @@ function getAugmentExtraMoves(board: Board, from: Position, piece: Piece, augs: 
                 const backward = piece.team === 'cho' ? 1 : -1;
                 stepTo(backward, 0, () => true);
             }
+            // 기동졸: 아직 처음 줄(7행)에 있으면 앞으로 두 칸 (바로 앞 칸은 비어 있어야 함)
+            if (has(AUG.MOBILE_SOLDIER) && from.row === toBoardRow(piece.team, 7)) {
+                const forward = piece.team === 'cho' ? -1 : 1;
+                moves.push(...getJumpMoves(board, from, [{ path: [[forward, 0]], to: [forward * 2, 0] }]));
+            }
             break;
     }
     return moves;
+}
+
+/**
+ * 근위대의 활동 구역: 내 궁성(3×3) + 궁성의 위·아래·왼쪽·오른쪽 바로 바깥 칸.
+ * 모서리에서 대각선으로만 닿는 칸은 들어가지 않는다.
+ */
+function isGuardZone(team: Team, pos: Position): boolean {
+    const top = team === 'cho' ? 7 : 0;      // 내 궁성의 맨 위 행 (코드 기준)
+    const bottom = top + 2;
+    const inRows = pos.row >= top && pos.row <= bottom;
+    const inCols = pos.col >= 3 && pos.col <= 5;
+    if (inRows && inCols) return true;                                  // 궁성 안
+    if (inRows && (pos.col === 2 || pos.col === 6)) return true;        // 궁성 왼쪽·오른쪽 바깥
+    const outsideRow = team === 'cho' ? top - 1 : bottom + 1;           // 궁성 앞쪽 바깥 (판 가운데 쪽)
+    return pos.row === outsideRow && inCols;
 }
 
 /** 차의 도약: 처음 만난 "내 말" 하나를 건너뛰고, 그 뒤로 차처럼 미끄러진다 */

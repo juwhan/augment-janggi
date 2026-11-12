@@ -12,6 +12,12 @@ export const AUG = {
     SOLDIER_ARMY: 'soldier-army',         // 졸 대군
     CANNON_BRIDGE: 'cannon-bridge',       // 포의 다리
     ARMORED_HORSE: 'armored-horse',       // 철갑마
+    FREE_SETUP: 'free-setup',             // 자유 상차림
+    NIMBLE_ELEPHANT: 'nimble-elephant',   // 날랜 상
+    ROYAL_GUARD: 'royal-guard',           // 근위대
+    GENERAL_SPIRIT: 'general-spirit',     // 장수의 기백
+    IRON_PALACE: 'iron-palace',           // 철벽 궁성
+    MOBILE_SOLDIER: 'mobile-soldier',     // 기동졸
     // 중반
     SWIFT_HORSE: 'swift-horse',           // 질주마
     WIDE_ELEPHANT: 'wide-elephant',       // 넓은 상

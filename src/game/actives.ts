@@ -67,8 +67,9 @@ export function getActiveMoves(state: GameState): Move[] {
                             if (t === null) {
                                 add(pos, to);
                             } else {
+                                const ironPalace = isInPalace(to) && state.augments[enemy].includes(AUG.IRON_PALACE);
                                 if (t.team === enemy && t.type !== 'cannon' && t.type !== 'general'
-                                    && !hasEffect(state, 'protect', t.id)) add(pos, to);
+                                    && !hasEffect(state, 'protect', t.id) && !ironPalace) add(pos, to);
                                 break;
                             }
                             to = { row: to.row + dr, col: to.col + dc };

@@ -12,7 +12,7 @@ import type { AugmentId, Move, PieceType, Position, Team } from '../game/types';
 import { getAugment } from '../augments/registry';
 import { BOT_LEVELS } from '../bot';
 import type { BotRequest, BotResponse } from '../bot/bot.worker';
-import type { AugmentPhase } from '../augments/registry';
+import type { AugmentPhase, DraftPick } from '../augments/registry';
 import { PHASE_NAME, PHASE_ORDER } from '../augments/registry';
 import { DRAFT_THRESHOLDS, botPickAugment, drawOffers, finishDraft, pendingDraftPhase } from '../augments/draft';
 import { BoardView } from './BoardView';
@@ -24,7 +24,7 @@ import type { GameSettings } from './StartScreen';
 interface DraftState {
     phase: AugmentPhase;
     offers: Record<Team, AugmentId[]>;       // 각자에게 나온 카드
-    picks: Record<Team, AugmentId | null>;   // 각자 고른 카드
+    picks: Record<Team, DraftPick | null>;   // 각자 고른 카드 (+ 선택지)
     done: Record<Team, boolean>;             // 각자 골랐는지 (카드가 없으면 처음부터 true)
 }
 
@@ -68,6 +68,13 @@ function toOptions(moves: Move[], state: ReturnType<typeof createInitialState>):
     return options;
 }
 
+/**
+ * 판에 흔적을 남길 만한 수인지.
+ * 넘기기, 그리고 칸과 상관없는 증강(일제 포격, 연속 행동, 시간 정지 발동)은 남기지 않는다.
+ */
+const leavesTrace = (m: Move) =>
+    !m.pass && m.augment !== AUG.BARRAGE && m.augment !== AUG.DOUBLE_MOVE && m.augment !== AUG.TIME_STOP;
+
 /** 장군/멍군 글자 표시 시간 (밀리초) */
 const FLASH_MS = 1400;
 
@@ -95,6 +102,8 @@ export function Game({ settings, onExit }: GameProps) {
     const [selected, setSelected] = useState<Position | null>(null);
     const [draft, setDraft] = useState<DraftState | null>(null);
     const [using, setUsing] = useState<UsingAugment | null>(null);
+    // 바로 직전에 둔 수 (판에 흔적으로 표시). 넘기기는 남기지 않는다.
+    const [lastMove, setLastMove] = useState<Move | null>(null);
     const [flash, setFlash] = useState<{ text: string; key: number; team: Team } | null>(null);
 
     // ── 계산 ──
@@ -186,7 +195,7 @@ export function Game({ settings, onExit }: GameProps) {
     useEffect(() => {
         if (draftDue === null || draft !== null) return;
         const offers = drawOffers(state, draftDue);
-        const picks: Record<Team, AugmentId | null> = { cho: null, han: null };
+        const picks: Record<Team, DraftPick | null> = { cho: null, han: null };
         const done = { cho: offers.cho.length === 0, han: offers.han.length === 0 };
         if (isBotGame) {
             picks[botTeam] = botPickAugment(offers[botTeam], settings.level);
@@ -204,10 +213,10 @@ export function Game({ settings, onExit }: GameProps) {
     }, [draft]);
 
     // 사람이 카드를 골랐을 때
-    const handlePick = useCallback((team: Team, id: AugmentId | null) => {
+    const handlePick = useCallback((team: Team, pick: DraftPick | null) => {
         setDraft((d) => d && {
             ...d,
-            picks: { ...d.picks, [team]: id },
+            picks: { ...d.picks, [team]: pick },
             done: { ...d.done, [team]: true },
         });
     }, []);
@@ -239,7 +248,10 @@ export function Game({ settings, onExit }: GameProps) {
             const wait = Math.max(0, BOT_DELAY_MS - (Date.now() - startedAt));
             timer = setTimeout(() => {
                 const move = event.data.move;
-                if (move) setState(applyMove(state, move));
+                if (move) {
+                    setState(applyMove(state, move));
+                    if (leavesTrace(move)) setLastMove(move);
+                }
             }, wait);
         };
 
@@ -307,6 +319,7 @@ export function Game({ settings, onExit }: GameProps) {
     // 수 하나를 두고, 선택 상태를 정리한다
     function playMove(move: Move) {
         setState(applyMove(state, move));
+        if (leavesTrace(move)) setLastMove(move);
         setSelected(null);
         setUsing(null);
     }
@@ -333,6 +346,7 @@ export function Game({ settings, onExit }: GameProps) {
         setSelected(null);
         setDraft(null);
         setUsing(null);
+        setLastMove(null);
         checkedTeamRef.current = null;
         lastTurnRef.current = -1;
     }
@@ -432,6 +446,7 @@ export function Game({ settings, onExit }: GameProps) {
                     protectedIds={protectedIds}
                     checkedGeneral={checkedGeneral}
                     flash={flash}
+                    lastMove={lastMove}
                     // 봇 대전에서 한으로 플레이하면 내 진영이 아래에 오도록 판을 뒤집는다
                     flipped={isBotGame && settings.playerTeam === 'han'}
                 />
@@ -460,7 +475,7 @@ export function Game({ settings, onExit }: GameProps) {
                     phase={draft.phase}
                     team={picker}
                     offers={draft.offers[picker]}
-                    onPick={(id) => handlePick(picker!, id)}
+                    onPick={(pick) => handlePick(picker!, pick)}
                 />
             )}
         </section>

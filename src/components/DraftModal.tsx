@@ -3,8 +3,8 @@
 // 시간이 다 되면 무작위로 1장이 골라진다.
 // ───────────────────────────────────────────────
 import { useEffect, useState } from 'react';
-import { PHASE_NAME } from '../augments/registry';
-import type { AugmentPhase } from '../augments/registry';
+import { PHASE_NAME, getAugment } from '../augments/registry';
+import type { AugmentPhase, DraftPick } from '../augments/registry';
 import { randomPick } from '../augments/draft';
 import type { AugmentId, Team } from '../game/types';
 import { AugmentCard } from './AugmentCard';
@@ -20,11 +20,19 @@ interface DraftModalProps {
     team: Team;                 // 지금 고르는 진영
     offers: AugmentId[];        // 이 진영에게 나온 카드
     waitingText?: string;       // 고른 뒤 상대를 기다릴 때 보여줄 문구 (없으면 고르는 화면)
-    onPick: (id: AugmentId | null) => void;
+    onPick: (pick: DraftPick | null) => void;
 }
 
 export function DraftModal({ phase, team, offers, waitingText, onPick }: DraftModalProps) {
     const [secondsLeft, setSecondsLeft] = useState(DRAFT_SECONDS);
+    // 선택지가 있는 카드(자유 상차림)를 누르면, 선택지를 고르는 단계로 넘어간다
+    const [choosing, setChoosing] = useState<AugmentId | null>(null);
+
+    // 카드를 눌렀을 때: 선택지가 없으면 바로 확정, 있으면 선택지 단계로
+    function clickCard(id: AugmentId) {
+        if (getAugment(id).choices) setChoosing(id);
+        else onPick({ id, choice: 0 });
+    }
 
     // 1초마다 남은 시간을 줄이고, 0이 되면 무작위로 고른다.
     useEffect(() => {
@@ -48,11 +56,21 @@ export function DraftModal({ phase, team, offers, waitingText, onPick }: DraftMo
                         <p className={`draft-sub ${team}`}>
                             {TEAM_SUBJECT[team]} 고를 차례 · <span className="draft-timer">{secondsLeft}초</span>
                         </p>
-                        <div className="draft-cards">
-                            {offers.map((id) => (
-                                <AugmentCard key={id} id={id} onClick={() => onPick(id)} />
-                            ))}
-                        </div>
+                        {choosing ? (
+                            <div className="draft-choices">
+                                <p>{getAugment(choosing).name}: 내 쪽에서 본 맨 뒷줄 배치를 고르세요 (왼쪽 · 오른쪽)</p>
+                                {getAugment(choosing).choices!.map((label, i) => (
+                                    <button key={label} onClick={() => onPick({ id: choosing, choice: i })}>{label}</button>
+                                ))}
+                                <button className="draft-back" onClick={() => setChoosing(null)}>다른 카드 고르기</button>
+                            </div>
+                        ) : (
+                            <div className="draft-cards">
+                                {offers.map((id) => (
+                                    <AugmentCard key={id} id={id} onClick={() => clickCard(id)} />
+                                ))}
+                            </div>
+                        )}
                     </>
                 )}
             </div>

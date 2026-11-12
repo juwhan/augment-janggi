@@ -295,3 +295,25 @@ button:disabled {
     80% { opacity: 1; }
     100% { opacity: 0; }
 }
+
+/* ── 직전 수의 흔적 ── */
+.last-from {
+    fill: rgba(70, 120, 210, 0.15);
+    stroke: rgba(70, 120, 210, 0.8);
+    stroke-width: 2;
+    stroke-dasharray: 4 3;
+}
+/* 자유 상차림처럼 카드를 고른 뒤 한 번 더 고르는 선택지 */
+.draft-choices {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+.draft-choices p {
+    width: 100%;
+    margin: 0 0 4px;
+}
+.draft-choices .draft-back {
+    background: transparent;
+    border-style: dashed;
+}

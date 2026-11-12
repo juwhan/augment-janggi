@@ -13,7 +13,7 @@
 //   45초 안에 동시에 1장씩 고르고, 시간이 지나면 무작위로 1장.
 // ───────────────────────────────────────────────
 import { AUGMENTS, PHASE_ORDER, applyPick, getAugment } from './registry';
-import type { AugmentPhase } from './registry';
+import type { AugmentPhase, DraftPick } from './registry';
 import type { AugmentId, GameState, Team } from '../game/types';
 
 /** 중반/종반 드래프트가 열리는 "잡힌 주요 기물 수" */
@@ -61,23 +61,32 @@ export function drawOffers(state: GameState, phase: AugmentPhase): Record<Team, 
  * 두 사람이 고른 증강을 적용하고 드래프트를 끝낸다.
  * 초의 증강을 먼저 적용하고 한의 증강을 적용한다. (즉시형은 각자 자기 진영만 바꾸므로 순서가 결과에 영향이 없다)
  */
-export function finishDraft(state: GameState, picks: Record<Team, AugmentId | null>): GameState {
+export function finishDraft(state: GameState, picks: Record<Team, DraftPick | null>): GameState {
     let next = state;
     for (const team of ['cho', 'han'] as Team[]) {
-        const id = picks[team];
-        if (id) next = applyPick(next, team, id);
+        const pick = picks[team];
+        if (pick) next = applyPick(next, team, pick.id, pick.choice);
     }
     return { ...next, draftsDone: next.draftsDone + 1 };
 }
 
 /** 봇의 드래프트 선택. 1~2단계는 무작위, 3단계부터는 botValue가 가장 높은 것 */
-export function botPickAugment(offers: AugmentId[], level: number): AugmentId | null {
+export function botPickAugment(offers: AugmentId[], level: number): DraftPick | null {
     if (offers.length === 0) return null;
-    if (level <= 2) return offers[Math.floor(Math.random() * offers.length)];
-    return [...offers].sort((a, b) => getAugment(b).botValue - getAugment(a).botValue)[0];
+    if (level <= 2) return randomPick(offers);
+    const id = [...offers].sort((a, b) => getAugment(b).botValue - getAugment(a).botValue)[0];
+    return { id, choice: randomChoice(id) };
 }
 
-/** 시간 초과 등으로 무작위 선택 */
-export function randomPick(offers: AugmentId[]): AugmentId | null {
-    return offers.length === 0 ? null : offers[Math.floor(Math.random() * offers.length)];
+/** 시간 초과 등으로 무작위 선택 (선택지가 있는 증강이면 선택지도 무작위) */
+export function randomPick(offers: AugmentId[]): DraftPick | null {
+    if (offers.length === 0) return null;
+    const id = offers[Math.floor(Math.random() * offers.length)];
+    return { id, choice: randomChoice(id) };
+}
+
+/** 증강의 선택지 중 무작위 번호 (선택지가 없으면 0) */
+function randomChoice(id: AugmentId): number {
+    const n = getAugment(id).choices?.length ?? 0;
+    return n > 0 ? Math.floor(Math.random() * n) : 0;
 }
