@@ -53,6 +53,12 @@ export function createInitialState(): GameState {
         augments: { cho: [], han: [] },
         draftsDone: 0,
         majorCaptured: 0,
+        usedAugments: { cho: [], han: [] },
+        captured: { cho: [], han: [] },
+        effects: [],
+        traps: [],
+        armed: null,
+        bonus: null,
         quietMoves: 0,
         positionCounts: {},
     };

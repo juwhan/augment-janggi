@@ -14,7 +14,7 @@ import type { AugmentId, Board, GameState, PieceType, Team } from '../game/types
 export type AugmentPhase = 'opening' | 'middle' | 'end';
 
 /** 증강 유형 (화면 표시용) */
-export type AugmentKind = '즉시' | '패시브' | '발동형' | '승리 조건';
+export type AugmentKind = '즉시' | '패시브' | '발동형' | '승리 조건' | '액티브';
 
 export interface AugmentDef {
     id: AugmentId;
@@ -128,6 +128,42 @@ export const AUGMENTS: AugmentDef[] = [
         id: AUG.BLAST_CANNON, name: '폭렬포', phase: 'middle', kind: '패시브', botValue: 4,
         description: '내 포가 잡지 않고 이동하면 도착 칸 상하좌우의 말이 피아 구분 없이 사라진다. 궁성 안 칸과 궁은 피해가 없다',
     },
+    {
+        id: AUG.CANNON_STRIKE, name: '포격', phase: 'middle', kind: '액티브', botValue: 3,
+        description: '1회: 내 포 하나가 받침 없이 차처럼 직선으로 이동·공격한다 (포와 궁은 못 잡음)',
+    },
+    {
+        id: AUG.FREEZE, name: '빙결', phase: 'middle', kind: '액티브', botValue: 2,
+        description: '1회: 상대 말 하나(궁 제외)를 상대의 다음 차례 동안 못 움직이게 한다',
+    },
+    {
+        id: AUG.PROTECT, name: '수호', phase: 'middle', kind: '액티브', botValue: 2,
+        description: '1회: 내 말 하나가 상대의 다음 2번의 차례 동안 잡히지 않는다',
+    },
+    {
+        id: AUG.SWAP, name: '자리 바꾸기', phase: 'middle', kind: '액티브', botValue: 2,
+        description: '1회: 궁을 제외한 내 말 두 개의 위치를 바꾼다',
+    },
+    {
+        id: AUG.PROMOTE, name: '승급', phase: 'middle', kind: '액티브', botValue: 3,
+        description: '1회: 강을 건넌 내 졸 하나를 차로 바꾼다',
+    },
+    {
+        id: AUG.REINFORCE, name: '병력 보충', phase: 'middle', kind: '액티브', botValue: 1.5,
+        description: '1회: 잡힌 내 졸 하나를 내 졸 시작 줄(7행) 빈 칸에 되살린다',
+    },
+    {
+        id: AUG.TRAP, name: '함정', phase: 'middle', kind: '액티브', botValue: 2,
+        description: '1회: 빈 칸 하나에 함정을 설치한다(양쪽에 보임). 상대 말이 들어오면 그 말이 사라진다',
+    },
+    {
+        id: AUG.DOUBLE_MOVE, name: '연속 행동', phase: 'middle', kind: '액티브', botValue: 3,
+        description: '1회: 이번 차례에 말 하나를 두 번 움직인다 (두 번째 이동은 잡기 불가)',
+    },
+    {
+        id: AUG.ASSAULT_SOLDIER, name: '돌격졸', phase: 'middle', kind: '발동형', botValue: 3,
+        description: '내 졸이 말을 잡으면 그 졸이 한 번 더 움직인다. 한 차례에 한 번만, 연쇄되지 않는다',
+    },
 
     // ─────────── 종반 ───────────
     {
@@ -149,6 +185,30 @@ export const AUGMENTS: AugmentDef[] = [
     {
         id: AUG.MARCH_VICTORY, name: '진군 승리', phase: 'end', kind: '승리 조건', botValue: 5,
         description: '내 졸 하나가 상대 맨 끝 줄(1행)에 도착하면 승리한다',
+    },
+    {
+        id: AUG.SNIPE, name: '저격', phase: 'end', kind: '액티브', botValue: 4,
+        description: '1회: 상대 말 하나(궁·차 제외)를 제거한다',
+    },
+    {
+        id: AUG.BARRAGE, name: '일제 포격', phase: 'end', kind: '액티브', botValue: 3,
+        description: '1회: 가로 한 줄을 골라 그 줄의 상대 졸을 모두 제거한다',
+    },
+    {
+        id: AUG.REVIVE, name: '부활', phase: 'end', kind: '액티브', botValue: 3,
+        description: '1회: 잡힌 내 말 하나(차 제외)를 내 궁성 안 빈 칸에 되살린다',
+    },
+    {
+        id: AUG.CHARIOT_CLONE, name: '차 분신', phase: 'end', kind: '액티브', botValue: 5,
+        description: '1회: 내 차 하나 바로 옆 빈 칸에 차를 하나 더 만든다',
+    },
+    {
+        id: AUG.TIME_STOP, name: '시간 정지', phase: 'end', kind: '액티브', botValue: 4,
+        description: '1회: 이번 차례에 두 수를 둔다 (두 번째 수로 궁은 못 잡음)',
+    },
+    {
+        id: AUG.STAND_IN, name: '대역', phase: 'end', kind: '발동형', botValue: 4,
+        description: '내 궁이 처음 잡힐 때, 궁 대신 잡으러 온 말이 사라진다 (1회)',
     },
 ];
 

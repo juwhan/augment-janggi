@@ -1,7 +1,8 @@
-import type { GameState, Move, Position, Board, Piece, AugmentId } from './types';
+import type { GameState, Move, Position, Board, Piece, AugmentId, Team } from './types';
 import { inBounds, getPiece, isInPalace } from './board';
 import { ROWS, COLS } from './types';
 import { AUG } from './augmentIds';
+import { findGeneral, getActiveMoves, hasEffect } from './actives';
 
 // 말 하나가 갈 수 있는 수
 function getPieceMoves(board: Board, from: Position): Move[] {
@@ -19,10 +20,11 @@ function getPieceMoves(board: Board, from: Position): Move[] {
     }
 }
 
-// 지금 차례인 진영의 모든 수
+// 지금 차례인 진영의 모든 수 (보통 이동 + 액티브 증강 사용 + 추가 이동 중이면 넘기기)
 export function getLegalMoves(state: GameState): Move[] {
     const moves: Move[] = []; // 판 전체에서 찾은 수를 모아둘 배열
     const augs = state.augments[state.turn]; // 지금 차례인 진영이 가진 증강
+    const bonus = state.bonus;               // 추가 이동 중이면 그 조건
 
     // 판의 모든 칸(10행 x 9열)을 하나씩 확인한다. C의 2중 for문과 같다.
     for (let row = 0; row < ROWS; row++) {
@@ -31,34 +33,67 @@ export function getLegalMoves(state: GameState): Move[] {
             const target = getPiece(state.board, { row, col });
 
             // 2. 말이 있고(null이 아니고), 지금 차례인 진영의 말일 때만 수를 찾는다.
-            if (target !== null && target.team === state.turn) {
-                // getPieceMoves가 말 종류(차, 마, 포...)를 보고 알맞은 함수를 대신 골라준다.
-                // moves.push(...배열)은 배열을 풀어서 하나씩 넣는다.
-                const pieceMoves = getPieceMoves(state.board, { row, col });
-                moves.push(...pieceMoves);
+            if (target === null || target.team !== state.turn) continue;
 
-                // 3. [증강] 증강이 있으면, 증강으로 새로 생긴 이동을 추가한다.
-                //    기본 이동과 같은 칸으로 가는 수는 중복이니 빼고 넣는다.
-                if (augs.length > 0) {
-                    const extra = getAugmentExtraMoves(state.board, { row, col }, target, augs);
-                    if (extra.length > 0) {
-                        // 이미 있는 도착 칸을 "행,열" 글자로 모아두고, 없는 것만 추가
-                        const seen = new Set(pieceMoves.map((m) => `${m.to.row},${m.to.col}`));
-                        for (const m of extra) {
-                            const key = `${m.to.row},${m.to.col}`;
-                            if (!seen.has(key)) {
-                                seen.add(key);
-                                moves.push(m);
-                            }
-                        }
+            // [증강] 빙결된 말은 못 움직인다. 추가 이동 중이면 정해진 말만 움직인다.
+            if (hasEffect(state, 'freeze', target.id)) continue;
+            if (bonus && bonus.pieceId !== null && bonus.pieceId !== target.id) continue;
+
+            // getPieceMoves가 말 종류(차, 마, 포...)를 보고 알맞은 함수를 대신 골라준다.
+            const pieceMoves = getPieceMoves(state.board, { row, col });
+
+            // 3. [증강] 증강이 있으면, 증강으로 새로 생긴 이동을 추가한다.
+            //    기본 이동과 같은 칸으로 가는 수는 중복이니 빼고 넣는다.
+            if (augs.length > 0) {
+                const extra = getAugmentExtraMoves(state.board, { row, col }, target, augs);
+                const seen = new Set(pieceMoves.map((m) => `${m.to.row},${m.to.col}`));
+                for (const m of extra) {
+                    const key = `${m.to.row},${m.to.col}`;
+                    if (!seen.has(key)) {
+                        seen.add(key);
+                        pieceMoves.push(m);
                     }
                 }
+            }
+
+            // 4. [증강] 잡을 수 없는 말을 잡는 수는 뺀다.
+            //    - 수호 중인 상대 말
+            //    - 추가 이동 중 잡기가 금지된 경우 (연속 행동의 두 번째 이동 등)
+            for (const m of pieceMoves) {
+                const victim = getPiece(state.board, m.to);
+                if (victim !== null) {
+                    if (hasEffect(state, 'protect', victim.id)) continue;
+                    if (bonus && !bonus.canCapture) continue;
+                    if (bonus && !bonus.canCaptureGeneral && victim.type === 'general') continue;
+                }
+                moves.push(m);
             }
         }
     }
 
+    if (bonus) {
+        // 추가 이동은 쓰지 않고 넘길 수도 있다. (from/to는 의미가 없어서 내 궁 위치를 넣는다)
+        const general = findGeneral(state.board, state.turn) ?? { row: 0, col: 0 };
+        moves.push({ from: general, to: general, pass: true });
+    } else {
+        // 5. [증강] 액티브 증강 사용도 "둘 수 있는 수"에 넣는다. 봇이 자동으로 활용한다.
+        moves.push(...getActiveMoves(state));
+    }
+
     // 판을 다 돈 뒤에 모은 수를 한꺼번에 돌려준다.
     return moves;
+}
+
+/**
+ * team의 궁이 지금 공격받고 있는지 (= 상대가 다음 수에 궁을 잡을 수 있는지). 장군 표시용.
+ */
+export function isInCheck(state: GameState, team: Team): boolean {
+    const general = findGeneral(state.board, team);
+    if (!general) return false;
+    const enemyView: GameState = { ...state, turn: team === 'cho' ? 'han' : 'cho', bonus: null, armed: null };
+    return getLegalMoves(enemyView).some(
+        (m) => !m.augment && !m.pass && m.to.row === general.row && m.to.col === general.col,
+    );
 }
 
 // ───────────────────────────────────────────────

@@ -19,6 +19,7 @@ export const greedyBot: Bot = (state) => {
     let bestMoves: Move[] = []; // 그 점수를 내는 수들 (같은 점수가 여러 개일 수 있다)
 
     for (const move of moves) {
+        if (move.augment || move.pass) continue; // 증강 사용과 넘기기는 "잡기"가 아니다
         const target = getPiece(state.board, move.to);
         if (target === null) continue; // 잡는 수가 아니면 건너뛴다
 

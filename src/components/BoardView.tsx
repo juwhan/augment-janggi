@@ -5,7 +5,7 @@
 // ───────────────────────────────────────────────
 import { PIECE_LABEL } from '../game/board';
 import { COLS, ROWS } from '../game/types';
-import type { Board, PieceType, Position } from '../game/types';
+import type { Board, PieceType, Position, Trap } from '../game/types';
 
 // 판 크기 설정 (단위: SVG 좌표. 실제 화면 크기는 CSS가 맞춰준다)
 const GAP = 56;      // 선과 선 사이 간격
@@ -31,9 +31,18 @@ interface BoardViewProps {
     targets: Position[];         // 선택한 말이 갈 수 있는 칸들
     onClick: (pos: Position) => void;
     flipped?: boolean;           // true면 판을 180도 돌려서 그린다 (한으로 플레이할 때 내 진영이 아래에 오도록)
+    // ── 증강·상태 표시 ──
+    traps?: Trap[];                    // 설치된 함정
+    frozenIds?: Set<string>;           // 빙결된 말 id
+    protectedIds?: Set<string>;        // 수호 중인 말 id
+    checkedGeneral?: Position | null;  // 장군을 받고 있는 궁 위치
+    flash?: { text: string; key: number; team: string } | null; // 판 위에 잠깐 뜨는 글자 (장군!/멍군!)
 }
 
-export function BoardView({ board, selected, targets, onClick, flipped = false }: BoardViewProps) {
+export function BoardView({
+    board, selected, targets, onClick, flipped = false,
+    traps = [], frozenIds, protectedIds, checkedGeneral = null, flash = null,
+}: BoardViewProps) {
     // (row, col) → 화면 좌표(x, y). 말은 칸 안이 아니라 "선이 만나는 점" 위에 놓인다.
     // 뒤집을 때는 행/열 번호를 반대로 센다. (0행 → 9행 자리, 0열 → 8열 자리)
     // 데이터(board)는 그대로 두고 "그리는 위치"만 바꾸는 것이라, 규칙 코드는 전혀 영향받지 않는다.
@@ -65,14 +74,30 @@ export function BoardView({ board, selected, targets, onClick, flipped = false }
                 <line x1={toX(5)} y1={toY(7)} x2={toX(3)} y2={toY(9)} />
             </g>
 
+            {/* 3-1. 함정: 설치한 진영 색깔의 X 표시 */}
+            {traps.map((t) => (
+                <g key={`trap${t.pos.row}-${t.pos.col}`} className={`trap ${t.owner}`}>
+                    <line x1={toX(t.pos.col) - 12} y1={toY(t.pos.row) - 12} x2={toX(t.pos.col) + 12} y2={toY(t.pos.row) + 12} />
+                    <line x1={toX(t.pos.col) + 12} y1={toY(t.pos.row) - 12} x2={toX(t.pos.col) - 12} y2={toY(t.pos.row) + 12} />
+                </g>
+            ))}
+
             {/* 4. 말 */}
             {rows.map((r) =>
                 cols.map((c) => {
                     const piece = board[r][c];
                     if (!piece) return null;
                     const isSelected = selected !== null && selected.row === r && selected.col === c;
+                    const inCheck = checkedGeneral !== null && checkedGeneral.row === r && checkedGeneral.col === c;
+                    const classes = [
+                        'piece', piece.team,
+                        isSelected ? 'selected' : '',
+                        frozenIds?.has(piece.id) ? 'frozen' : '',
+                        protectedIds?.has(piece.id) ? 'protected' : '',
+                        inCheck ? 'in-check' : '',
+                    ].join(' ');
                     return (
-                        <g key={piece.id} className={`piece ${piece.team} ${isSelected ? 'selected' : ''}`}>
+                        <g key={piece.id} className={classes}>
                             <circle cx={toX(c)} cy={toY(r)} r={PIECE_RADIUS[piece.type]} />
                             <text x={toX(c)} y={toY(r)} dy="0.35em" textAnchor="middle"
                                 fontSize={PIECE_RADIUS[piece.type] * 0.95}>
@@ -94,6 +119,14 @@ export function BoardView({ board, selected, targets, onClick, flipped = false }
                         cx={toX(t.col)} cy={toY(t.row)} r={8} />
                 );
             })}
+
+            {/* 5-1. 장군!/멍군! 글자. key가 바뀔 때마다 애니메이션이 처음부터 다시 나온다 */}
+            {flash && (
+                <text key={flash.key} className={`board-flash ${flash.team}`}
+                    x={WIDTH / 2} y={HEIGHT / 2} dy="0.35em" textAnchor="middle">
+                    {flash.text}
+                </text>
+            )}
 
             {/* 6. 클릭 영역: 교차점마다 투명한 원을 맨 위에 깔아서 클릭을 받는다.
                    말이나 점보다 위에 있어야 어디를 눌러도 클릭이 잡힌다. */}

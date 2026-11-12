@@ -216,3 +216,82 @@ button:disabled {
     grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
     gap: 12px;
 }
+
+/* ── 액티브 증강: 패널의 사용 버튼 ── */
+.augment-slot {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+.augment-slot.used .augment-card { opacity: 0.45; }
+.augment-slot.using .augment-card { border-width: 3px; box-shadow: 0 0 0 3px rgba(91, 139, 214, 0.35); }
+.augment-use {
+    align-self: flex-end;
+    padding: 4px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    background: #5a3e1b;
+    color: #fffaf0;
+}
+.augment-used {
+    align-self: flex-end;
+    font-size: 12px;
+    color: #8a7a60;
+}
+
+/* ── 안내 막대 (추가 이동, 대상 고르기) ── */
+.hint-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 8px 12px;
+    border-radius: 8px;
+    background: #fff2b3;
+    color: #3a2a12;
+    font-size: 14px;
+    font-weight: 600;
+    max-width: 520px;
+}
+.hint-bar button { padding: 4px 12px; font-size: 13px; }
+
+/* ── 판 위 증강 표시 ── */
+.trap line { stroke-width: 4; stroke-linecap: round; }
+.trap.cho line { stroke: #1f6f43; }
+.trap.han line { stroke: #b3261e; }
+.piece.frozen circle { fill: #d6ecff; stroke-dasharray: 4 3; }
+.piece.protected circle { stroke: #d4a017; stroke-width: 4; }
+
+/* 장군을 받고 있는 궁: 빨간 테두리가 깜빡인다 */
+.piece.in-check circle {
+    stroke: #e02020;
+    stroke-width: 5;
+    animation: check-pulse 0.9s ease-in-out infinite;
+}
+@keyframes check-pulse {
+    0%, 100% { stroke-opacity: 1; }
+    50% { stroke-opacity: 0.25; }
+}
+
+/* 장군!/멍군! 글자: 커졌다가 사라진다 */
+.board-flash {
+    font-size: 88px;
+    font-weight: 900;
+    paint-order: stroke;
+    stroke: #fffaf0;
+    stroke-width: 10px;
+    pointer-events: none;
+    transform-box: fill-box;
+    transform-origin: center;
+    animation: flash-pop 1.4s ease-out forwards;
+}
+.board-flash.cho { fill: #1f6f43; }
+.board-flash.han { fill: #b3261e; }
+@keyframes flash-pop {
+    0% { transform: scale(0.4); opacity: 0; }
+    15% { transform: scale(1.15); opacity: 1; }
+    30% { transform: scale(1); opacity: 1; }
+    80% { opacity: 1; }
+    100% { opacity: 0; }
+}

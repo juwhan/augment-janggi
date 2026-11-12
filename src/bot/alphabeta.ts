@@ -48,6 +48,8 @@ function checkTime(ctx: SearchContext) {
 
 /** 이 수로 잡게 되는 말 (잡는 수가 아니면 null) */
 function capturedBy(state: GameState, move: Move) {
+    // 증강 사용과 넘기기는 "잡는 수"로 치지 않는다 (정지 탐색이 끝없이 길어지지 않도록)
+    if (move.augment || move.pass) return null;
     return state.board[move.to.row][move.to.col];
 }
 

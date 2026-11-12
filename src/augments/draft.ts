@@ -25,6 +25,7 @@ const CARDS_PER_PLAYER = 3;
 /** 지금 열려야 하는 드래프트 단계. 없으면 null */
 export function pendingDraftPhase(state: GameState): AugmentPhase | null {
     if (state.winner !== null || state.isDraw) return null;
+    if (state.bonus || state.armed) return null; // 추가 이동 중에는 열지 않는다
     if (state.draftsDone >= PHASE_ORDER.length) return null;
 
     const phase = PHASE_ORDER[state.draftsDone];
